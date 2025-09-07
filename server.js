@@ -25,7 +25,7 @@ const io = socketIo(server, {
     pingInterval: 25000
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 // Global variables for cleanup
 let connectionMonitorInterval = null;
@@ -86,7 +86,21 @@ let connectionStats = {
 
 // Root route - serve dashboard
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    const indexPath = path.join(__dirname, 'index.html');
+    console.log('📁 Serving index.html from:', indexPath);
+    res.sendFile(indexPath);
+});
+
+// Debug route to check current working directory
+app.get('/debug', (req, res) => {
+    const fs = require('fs');
+    const files = fs.readdirSync(__dirname).filter(f => f.endsWith('.html'));
+    res.json({
+        currentDirectory: __dirname,
+        htmlFiles: files,
+        indexExists: fs.existsSync(path.join(__dirname, 'index.html')),
+        timestamp: new Date().toISOString()
+    });
 });
 
 // API: Get latest telemetry data
