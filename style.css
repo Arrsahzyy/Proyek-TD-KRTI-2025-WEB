@@ -1472,3 +1472,176 @@ body {
     background: linear-gradient(135deg, rgba(74, 85, 104, 0.8), rgba(113, 128, 150, 0.85));
     box-shadow: 0 0 10px rgba(214, 158, 46, 0.2);
 }
+
+/* UAV Map Marker Styling - Enhanced Visibility */
+.uav-marker {
+    position: relative;
+    z-index: 1000;
+}
+
+.uav-icon-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #d69e2e 0%, #b7791f 70%, #975a16 100%);
+    border: 3px solid #ffffff;
+    box-shadow: 
+        0 0 15px rgba(214, 158, 46, 0.6),
+        0 4px 15px rgba(0, 0, 0, 0.3),
+        inset 0 2px 5px rgba(255, 255, 255, 0.2);
+    transition: all 0.3s ease;
+    animation: uavFloat 3s ease-in-out infinite;
+}
+
+.uav-icon-container:hover {
+    transform: scale(1.1);
+    box-shadow: 
+        0 0 25px rgba(214, 158, 46, 0.8),
+        0 6px 20px rgba(0, 0, 0, 0.4),
+        inset 0 2px 5px rgba(255, 255, 255, 0.3);
+}
+
+.uav-icon {
+    font-size: 18px;
+    color: #1a365d !important;
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.3);
+    transform: rotate(45deg);
+    z-index: 2;
+    position: relative;
+}
+
+.uav-pulse {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60px;
+    height: 60px;
+    border: 2px solid rgba(214, 158, 46, 0.6);
+    border-radius: 50%;
+    animation: uavPulse 2s ease-in-out infinite;
+    z-index: 1;
+}
+
+.uav-pulse::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80px;
+    height: 80px;
+    border: 1px solid rgba(214, 158, 46, 0.3);
+    border-radius: 50%;
+    animation: uavPulse 2s ease-in-out infinite 0.5s;
+}
+
+/* Home Marker Styling */
+.home-marker {
+    position: relative;
+    z-index: 999;
+}
+
+.home-icon-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #38a169 0%, #2f855a 100%);
+    border: 2px solid #ffffff;
+    box-shadow: 
+        0 0 10px rgba(56, 161, 105, 0.5),
+        0 3px 10px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s ease;
+}
+
+.home-icon-container:hover {
+    transform: scale(1.05);
+    box-shadow: 
+        0 0 15px rgba(56, 161, 105, 0.7),
+        0 4px 15px rgba(0, 0, 0, 0.4);
+}
+
+.home-icon-container i {
+    font-size: 14px;
+    color: #ffffff !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Map Marker Animations */
+@keyframes uavFloat {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-3px); }
+}
+
+@keyframes uavPulse {
+    0% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(0.8);
+    }
+    50% {
+        opacity: 0.5;
+        transform: translate(-50%, -50%) scale(1.2);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(1.5);
+    }
+}
+
+/* Flight Path Line Enhancement */
+.leaflet-interactive {
+    stroke: #d69e2e !important;
+    stroke-width: 3 !important;
+    stroke-opacity: 0.8 !important;
+    fill: none !important;
+    filter: drop-shadow(0 0 3px rgba(214, 158, 46, 0.4));
+}
+
+/* Leaflet Map Overrides for Better Visibility */
+.leaflet-div-icon {
+    background: transparent !important;
+    border: none !important;
+}
+
+.leaflet-marker-icon {
+    filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.3));
+}
+
+/* Enhanced Map Controls */
+.leaflet-control-zoom a {
+    background-color: rgba(26, 54, 93, 0.9) !important;
+    color: #d69e2e !important;
+    border: 1px solid #d69e2e !important;
+}
+
+.leaflet-control-zoom a:hover {
+    background-color: rgba(44, 82, 130, 0.95) !important;
+    color: #fcd34d !important;
+}
+
+/* Map Attribution Styling */
+.leaflet-control-attribution {
+    background-color: rgba(26, 54, 93, 0.8) !important;
+    color: #cbd5e0 !important;
+    font-size: 10px !important;
+}
+
+/* GPS Status Colors */
+.gps-status.good {
+    color: #38a169 !important;
+}
+
+.gps-status.poor {
+    color: #d69e2e !important;
+}
+
+.gps-status.no-signal {
+    color: #e53e3e !important;
+}
