@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Swarakarsa ITERA Technology Development - UAV Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="loading-screen">
+        <div class="loading-content">
+            <div class="loading-spinner">
+                <div class="spinner-plane">
+                    <i class="fas fa-plane"></i>
+                </div>
+                <div class="spinner-orbit"></div>
+            </div>
+            <h2>Initializing UAV Dashboard</h2>
+            <p id="loading-text">Loading system components...</p>
+            <div class="loading-progress">
+                <div class="progress-bar" id="progress-bar"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="header-container">
+            <div class="logo">
+                <div class="logo-icon">
+                    <i class="fas fa-cube rotating"></i>
+                </div>
+                <div class="logo-text">
+                    <h1>Swarakarsa ITERA Technology Development</h1>
+                    <span class="subtitle">UAV Dashboard System</span>
+                </div>
+            </div>
+            <div class="header-status">
+                <div class="connection-indicators">
+                    <div class="status-item" id="cloud-status">
+                        <div class="status-dot offline pulsing"></div>
+                        <span class="status-text">Cloud Disconnected</span>
+                    </div>
+                    <div class="status-item" id="esp32-indicator">
+                        <i class="fas fa-microchip"></i>
+                        <span>ESP32</span>
+                        <div class="indicator-light" id="esp32-light"></div>
+                    </div>
+                    <div class="status-item wifi-signal">
+                        <i class="fas fa-wifi"></i>
+                        <div class="signal-bars">
+                            <span class="bar bar1"></span>
+                            <span class="bar bar2"></span>
+                            <span class="bar bar3"></span>
+                            <span class="bar bar4"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="system-time" id="system-time"></div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Dashboard -->
+    <main class="dashboard">
+        <!-- Left Panel - Flight Path -->
+        <section class="left-panel">
+            <div class="flight-path-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-map-marked-alt"></i> Realtime Flight Path</h3>
+                    <div class="card-controls">
+                        <button class="control-btn" id="fullscreen-map" title="Fullscreen">
+                            <i class="fas fa-expand"></i>
+                        </button>
+                        <button class="control-btn" id="refresh-map" title="Refresh">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="map-container" class="map-container">
+                    <div id="flight-map" class="flight-map"></div>
+                    <!-- Map Control Buttons -->
+                    <div class="map-controls">
+                        <button class="map-btn" id="zoom-in" title="Zoom In">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                        <button class="map-btn" id="zoom-out" title="Zoom Out">
+                            <i class="fas fa-minus"></i>
+                        </button>
+                        <button class="map-btn" id="center-map" title="Center Map">
+                            <i class="fas fa-crosshairs"></i>
+                        </button>
+                        <button class="map-btn" id="toggle-path" title="Toggle Flight Path">
+                            <i class="fas fa-route"></i>
+                        </button>
+                    </div>
+                    <!-- Map Status Indicator -->
+                    <div class="map-status">
+                        <div class="gps-status" id="gps-status">
+                            <i class="fas fa-satellite-dish"></i>
+                            <span>GPS: No Signal</span>
+                        </div>
+                    </div>
+                    <!-- Map Legend -->
+                    <div class="map-legend">
+                        <div class="legend-item">
+                            <i class="fas fa-plane legend-icon pulsing"></i>
+                            <span>UAV Position</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-line animated"></div>
+                            <span>Flight Path</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-marker home"></div>
+                            <span>Home Position</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Center Panel - Power Graph & Data -->
+        <section class="center-panel">
+            <!-- Power System Graph -->
+            <div class="power-graph-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-chart-line"></i> Power System Graph</h3>
+                    <div class="card-controls">
+                        <button class="control-btn" id="export-chart" title="Export Chart">
+                            <i class="fas fa-download"></i>
+                        </button>
+                        <button class="control-btn" id="toggle-chart" title="Toggle Chart Type">
+                            <i class="fas fa-chart-bar"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="graph-container">
+                    <div class="chart-loading" id="chart-loading">
+                        <div class="loading-spinner-small">
+                            <i class="fas fa-cog fa-spin"></i>
+                        </div>
+                        <span>Loading chart data...</span>
+                    </div>
+                    <canvas id="powerChart" class="power-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Telemetry Data Grid -->
+            <div class="telemetry-data">
+                <div class="data-header">
+                    <h4><i class="fas fa-tachometer-alt"></i> Telemetry Data</h4>
+                    <div class="data-refresh">
+                        <span class="refresh-indicator" id="data-refresh">●</span>
+                        <span class="refresh-text">Live</span>
+                    </div>
+                </div>
+                
+                <!-- Row 1 -->
+                <div class="data-row">
+                    <div class="data-card hoverable" data-tooltip="Current UAV Speed">
+                        <div class="data-icon">
+                            <i class="fas fa-tachometer-alt"></i>
+                        </div>
+                        <div class="data-content">
+                            <div class="data-label">Speed</div>
+                            <div class="data-value animate-number" id="telemetry-speed">0 km/h</div>
+                        </div>
+                        <div class="data-trend" id="speed-trend">
+                            <i class="fas fa-arrow-up"></i>
+                        </div>
+                    </div>
+                    <div class="data-card hoverable" data-tooltip="GPS Longitude">
+                        <div class="data-icon">
+                            <i class="fas fa-map-pin"></i>
+                        </div>
+                        <div class="data-content">
+                            <div class="data-label">Longitude</div>
+                            <div class="data-value animate-number" id="longitude">105.2663°</div>
+                        </div>
+                        <div class="data-trend" id="lon-trend">
+                            <i class="fas fa-minus"></i>
+                        </div>
+                    </div>
+                    <div class="data-card hoverable" data-tooltip="GPS Latitude">
+                        <div class="data-icon">
+                            <i class="fas fa-crosshairs"></i>
+                        </div>
+                        <div class="data-content">
+                            <div class="data-label">Latitude</div>
+                            <div class="data-value animate-number" id="latitude">-5.3971°</div>
+                        </div>
+                        <div class="data-trend" id="lat-trend">
+                            <i class="fas fa-minus"></i>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Row 2 -->
+                <div class="data-row">
+                    <div class="data-card hoverable critical" data-tooltip="Battery Voltage">
+                        <div class="data-icon">
+                            <i class="fas fa-battery-three-quarters"></i>
+                        </div>
+                        <div class="data-content">
+                            <div class="data-label">Voltage</div>
+                            <div class="data-value animate-number" id="voltage">14.8 V</div>
+                        </div>
+                        <div class="data-trend" id="voltage-trend">
+                            <i class="fas fa-arrow-down"></i>
+                        </div>
+                    </div>
+                    <div class="data-card hoverable warning" data-tooltip="Current Draw">
+                        <div class="data-icon">
+                            <i class="fas fa-bolt"></i>
+                        </div>
+                        <div class="data-content">
+                            <div class="data-label">Current</div>
+                            <div class="data-value animate-number" id="current">25.3 A</div>
+                        </div>
+                        <div class="data-trend" id="current-trend">
+                            <i class="fas fa-arrow-up"></i>
+                        </div>
+                    </div>
+                    <div class="data-card hoverable" data-tooltip="Power Consumption">
+                        <div class="data-icon">
+                            <i class="fas fa-fire"></i>
+                        </div>
+                        <div class="data-content">
+                            <div class="data-label">Power</div>
+                            <div class="data-value animate-number" id="power">374.4 W</div>
+                        </div>
+                        <div class="data-trend" id="power-trend">
+                            <i class="fas fa-arrow-up"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Panel - About & Emergency -->
+        <section class="right-panel">
+            <div class="about-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-info-circle"></i> CONTROL PANEL</h3>
+                </div>
+                <div class="about-content">
+                    <button class="team-btn hoverable">
+                        <i class="fas fa-users"></i>
+                        <span>Team Info</span>
+                    </button>
+                    
+                    <div class="or-divider">
+                        <span>EMERGENCY</span>
+                    </div>
+                    
+                    <div class="emergency-section">
+                        <div class="emergency-button">
+                            <button id="emergency-cutoff" class="emergency-cutoff pulsing-red">
+                                <div class="emergency-icon">
+                                    <i class="fas fa-power-off"></i>
+                                </div>
+                                <div class="emergency-text">
+                                    EMERGENCY<br>
+                                    <span class="cut-text">CUT OFF</span>
+                                </div>
+                            </button>
+                            <div class="emergency-status" id="emergency-status">
+                                <span>System Armed</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Status -->
+            <div class="system-status-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-server"></i> System Status</h3>
+                    <div class="status-indicator" id="system-health">
+                        <span class="health-dot"></span>
+                    </div>
+                </div>
+                <div class="status-items">
+                    <div class="status-item animated-status">
+                        <div class="status-left">
+                            <i class="fas fa-microchip status-icon"></i>
+                            <span class="status-label">ESP32:</span>
+                        </div>
+                        <span id="esp32-status" class="status-value offline">Offline</span>
+                        <div class="status-pulse" id="esp32-pulse"></div>
+                    </div>
+                    <div class="status-item animated-status">
+                        <div class="status-left">
+                            <i class="fas fa-link status-icon"></i>
+                            <span class="status-label">Connection:</span>
+                        </div>
+                        <span id="connection-mode" class="status-value">--</span>
+                        <div class="status-pulse" id="connection-pulse"></div>
+                    </div>
+                    <div class="status-item animated-status">
+                        <div class="status-left">
+                            <i class="fas fa-exchange-alt status-icon"></i>
+                            <span class="status-label">Packets:</span>
+                        </div>
+                        <span id="data-packets" class="status-value">--</span>
+                        <div class="packet-counter" id="packet-animation"></div>
+                    </div>
+                    <div class="status-item animated-status">
+                        <div class="status-left">
+                            <i class="fas fa-signal status-icon"></i>
+                            <span class="status-label">Signal:</span>
+                        </div>
+                        <span id="signal-strength" class="status-value">--</span>
+                        <div class="signal-indicator" id="signal-bars">
+                            <span class="signal-bar"></span>
+                            <span class="signal-bar"></span>
+                            <span class="signal-bar"></span>
+                            <span class="signal-bar"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Activity Log (Compact) -->
+            <div class="activity-log-card">
+                <div class="card-header">
+                    <h4><i class="fas fa-list-ul"></i> Activity Log</h4>
+                    <div class="log-controls">
+                        <button class="control-btn-small" id="clear-log" title="Clear Log">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        <button class="control-btn-small" id="export-log" title="Export Log">
+                            <i class="fas fa-file-export"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="activity-log" class="activity-log">
+                    <div class="log-entry">
+                        <span class="log-time">[System]</span>
+                        <span class="log-message">Dashboard initialized</span>
+                        <div class="log-indicator"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Notification System -->
+    <div id="notification-container" class="notification-container"></div>
+
+    <!-- Tooltip -->
+    <div id="tooltip" class="tooltip"></div>
+
+    <!-- Modal for Settings -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-cogs"></i> Dashboard Settings</h3>
+                <button class="close-btn" id="close-settings">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-group">
+                    <label>Update Interval (ms):</label>
+                    <input type="range" id="update-interval" min="100" max="5000" value="1000">
+                    <span id="interval-value">1000ms</span>
+                </div>
+                <div class="setting-group">
+                    <label>Chart Data Points:</label>
+                    <input type="range" id="chart-points" min="20" max="100" value="50">
+                    <span id="points-value">50</span>
+                </div>
+                <div class="setting-group">
+                    <label>Theme:</label>
+                    <select id="theme-selector">
+                        <option value="dark">Dark</option>
+                        <option value="light">Light</option>
+                        <option value="auto">Auto</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-section">
+                <span>&copy; 2025 UAV Dashboard - KRTI System</span>
+            </div>
+            <div class="footer-section">
+                <span>ESP32 Compatible | Real-time Telemetry</span>
+            </div>
+            <div class="footer-section">
+                <span id="client-count">0 clients connected</span>
+                <button class="settings-btn" id="open-settings" title="Settings">
+                    <i class="fas fa-cogs"></i>
+                </button>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="script.js"></script>
+</body>
+</html>
