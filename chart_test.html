@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chart Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: white;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .chart-container {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            height: 400px;
+            position: relative;
+        }
+        #powerChart {
+            width: 100% !important;
+            height: 100% !important;
+        }
+        .status {
+            background: #333;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .connected { background: #28a745; }
+        .disconnected { background: #dc3545; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚁 UAV Power Chart Test</h1>
+        <div id="status" class="status disconnected">Disconnected</div>
+        <div class="chart-container">
+            <canvas id="powerChart"></canvas>
+        </div>
+        <div id="data-display"></div>
+    </div>
+
+    <script>
+        let powerChart = null;
+        let socket = null;
+
+        function initChart() {
+            const ctx = document.getElementById('powerChart').getContext('2d');
+            
+            powerChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: 'Voltage (V)',
+                        data: [],
+                        borderColor: '#00d4aa',
+                        backgroundColor: 'rgba(0, 212, 170, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }, {
+                        label: 'Current (A)',
+                        data: [],
+                        borderColor: '#ffa500',
+                        backgroundColor: 'rgba(255, 165, 0, 0.1)',
+                        borderWidth: 2,
+                        fill: false,
+                        tension: 0.4
+                    }, {
+                        label: 'Power (W)',
+                        data: [],
+                        borderColor: '#ff3366',
+                        backgroundColor: 'rgba(255, 51, 102, 0.1)',
+                        borderWidth: 2,
+                        fill: false,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        duration: 0
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#ffffff'
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            ticks: {
+                                color: '#b0b0b0',
+                                maxTicksLimit: 8,
+                                callback: function(value) {
+                                    const date = new Date(value);
+                                    return date.toLocaleTimeString();
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            }
+                        },
+                        y: {
+                            ticks: {
+                                color: '#b0b0b0'
+                            },
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function connectSocket() {
+            socket = io('http://localhost:3001');
+            
+            socket.on('connect', () => {
+                console.log('✅ Connected to demo server');
+                document.getElementById('status').className = 'status connected';
+                document.getElementById('status').textContent = 'Connected to Demo Server';
+            });
+
+            socket.on('disconnect', () => {
+                console.log('❌ Disconnected from server');
+                document.getElementById('status').className = 'status disconnected';
+                document.getElementById('status').textContent = 'Disconnected';
+            });
+
+            socket.on('telemetryUpdate', (data) => {
+                console.log('📊 Received data:', data);
+                updateChart(data);
+                updateDisplay(data);
+            });
+        }
+
+        function updateChart(data) {
+            if (!powerChart) return;
+
+            const time = Date.now();
+            const maxPoints = 50;
+
+            // Add data points
+            powerChart.data.datasets[0].data.push({x: time, y: data.battery_voltage});
+            powerChart.data.datasets[1].data.push({x: time, y: data.battery_current});
+            powerChart.data.datasets[2].data.push({x: time, y: data.battery_power});
+
+            // Remove old points
+            powerChart.data.datasets.forEach(dataset => {
+                if (dataset.data.length > maxPoints) {
+                    dataset.data.shift();
+                }
+            });
+
+            powerChart.update('none');
+        }
+
+        function updateDisplay(data) {
+            document.getElementById('data-display').innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 20px;">
+                    <div style="background: #333; padding: 15px; border-radius: 4px; text-align: center;">
+                        <h3>Voltage</h3>
+                        <div style="font-size: 24px; color: #00d4aa;">${data.battery_voltage.toFixed(2)} V</div>
+                    </div>
+                    <div style="background: #333; padding: 15px; border-radius: 4px; text-align: center;">
+                        <h3>Current</h3>
+                        <div style="font-size: 24px; color: #ffa500;">${data.battery_current.toFixed(2)} A</div>
+                    </div>
+                    <div style="background: #333; padding: 15px; border-radius: 4px; text-align: center;">
+                        <h3>Power</h3>
+                        <div style="font-size: 24px; color: #ff3366;">${data.battery_power.toFixed(2)} W</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            initChart();
+            connectSocket();
+        });
+    </script>
+</body>
+</html>

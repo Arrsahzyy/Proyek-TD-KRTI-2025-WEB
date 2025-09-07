@@ -25,7 +25,7 @@ const PORT = 3000;
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname)); // Serve static files from current directory
 
 // Store latest telemetry data
 let latestTelemetry = {

@@ -25,6 +25,8 @@ class UAVDashboard {
         this.telemetryHistory = [];
         this.lastValues = {};
         this.trends = {};
+        this.isReceivingRealData = false;
+        this.demoInterval = null;
         
         // UI state
         this.isLoading = true;
@@ -121,6 +123,13 @@ class UAVDashboard {
                 this.updateConnectionStatus(true);
                 this.showNotification('Connected to server successfully', 'success');
                 this.addLogEntry('Connection', 'Connected to server');
+                
+                // Start demo data for chart testing if no real data within 3 seconds
+                setTimeout(() => {
+                    if (!this.isReceivingRealData) {
+                        this.startDemoData();
+                    }
+                }, 3000);
             });
 
             this.socket.on('disconnect', (reason) => {
@@ -268,13 +277,23 @@ class UAVDashboard {
 
     initializePowerChart() {
         try {
+            console.log('🔧 Initializing Power Chart...');
             const ctx = document.getElementById('powerChart')?.getContext('2d');
-            if (!ctx) return;
+            if (!ctx) {
+                console.error('❌ Canvas element powerChart not found!');
+                return;
+            }
 
             // Hide loading indicator
             const chartLoading = document.getElementById('chart-loading');
             if (chartLoading) {
                 chartLoading.style.display = 'none';
+            }
+
+            // Destroy existing chart if exists
+            if (this.powerChart) {
+                this.powerChart.destroy();
+                this.powerChart = null;
             }
 
             this.powerChart = new Chart(ctx, {
@@ -288,8 +307,11 @@ class UAVDashboard {
                         borderWidth: 2,
                         fill: true,
                         tension: 0.4,
-                        pointRadius: 0,
-                        pointHoverRadius: 5
+                        pointRadius: 2,
+                        pointHoverRadius: 5,
+                        pointBackgroundColor: '#00d4aa',
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 1
                     }, {
                         label: 'Current (A)',
                         data: [],
@@ -298,8 +320,11 @@ class UAVDashboard {
                         borderWidth: 2,
                         fill: false,
                         tension: 0.4,
-                        pointRadius: 0,
-                        pointHoverRadius: 5
+                        pointRadius: 2,
+                        pointHoverRadius: 5,
+                        pointBackgroundColor: '#ffa500',
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 1
                     }, {
                         label: 'Power (W)',
                         data: [],
@@ -308,8 +333,11 @@ class UAVDashboard {
                         borderWidth: 2,
                         fill: false,
                         tension: 0.4,
-                        pointRadius: 0,
-                        pointHoverRadius: 5
+                        pointRadius: 2,
+                        pointHoverRadius: 5,
+                        pointBackgroundColor: '#ff3366',
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 1
                     }]
                 },
                 options: {
@@ -501,6 +529,12 @@ class UAVDashboard {
     }
 
     processTelemetryData(data) {
+        // Check if this is real data from ESP32
+        if (data.connection_status !== 'demo') {
+            this.isReceivingRealData = true;
+            this.stopDemoData(); // Stop demo if real data arrives
+        }
+
         // Store historical data
         this.telemetryHistory.push({
             ...data,
@@ -604,32 +638,37 @@ class UAVDashboard {
     }
 
     updatePowerChart(data) {
-        if (!this.powerChart) return;
+        if (!this.powerChart) {
+            console.warn('⚠️ Power chart not initialized yet');
+            return;
+        }
 
         try {
             const time = Date.now();
-            const maxDataPoints = this.settings.chartDataPoints;
+            const maxDataPoints = this.settings.chartDataPoints || 50;
+
+            // Process voltage data
+            const voltage = data.battery_voltage || data.voltage || 0;
+            const current = data.battery_current || data.current || 0;
+            const power = data.battery_power || data.power || (voltage * current);
 
             // Add new data points
-            if (data.voltage !== undefined) {
-                this.powerChart.data.datasets[0].data.push({x: time, y: data.voltage});
-            }
-            if (data.current !== undefined) {
-                this.powerChart.data.datasets[1].data.push({x: time, y: data.current});
-            }
-            if (data.power !== undefined) {
-                this.powerChart.data.datasets[2].data.push({x: time, y: data.power});
-            }
+            this.powerChart.data.datasets[0].data.push({x: time, y: voltage});
+            this.powerChart.data.datasets[1].data.push({x: time, y: current});
+            this.powerChart.data.datasets[2].data.push({x: time, y: power});
 
-            // Remove old data points
+            // Remove old data points to maintain performance
             this.powerChart.data.datasets.forEach(dataset => {
                 if (dataset.data.length > maxDataPoints) {
                     dataset.data.shift();
                 }
             });
 
-            // Update with animation
-            this.powerChart.update('active');
+            // Update chart with smooth animation
+            this.powerChart.update('none'); // Use 'none' for better performance in realtime
+
+            console.log('📊 Chart updated:', { voltage: voltage.toFixed(2), current: current.toFixed(2), power: power.toFixed(2) });
+
         } catch (error) {
             console.error('❌ Error updating power chart:', error);
         }
@@ -1165,6 +1204,53 @@ Contact: uav@swarakarsa.itera.ac.id`;
                 this.initializeSocket();
             }
         }, delay);
+    }
+
+    // Demo data for testing chart functionality
+    startDemoData() {
+        console.log('🎮 Demo mode activated - generating sample power data for chart testing');
+        this.showNotification('Demo mode: Generating sample data for chart testing', 'info');
+        
+        this.demoInterval = setInterval(() => {
+            const time = Date.now();
+            const baseVoltage = 14.8;
+            const baseCurrent = 2.5;
+            
+            // Generate realistic fluctuating data
+            const voltage = baseVoltage + Math.sin(time / 10000) * 0.5 + (Math.random() - 0.5) * 0.2;
+            const current = baseCurrent + Math.sin(time / 15000) * 0.8 + (Math.random() - 0.5) * 0.3;
+            const power = voltage * current;
+            
+            const demoData = {
+                battery_voltage: parseFloat(voltage.toFixed(2)),
+                battery_current: parseFloat(current.toFixed(2)),
+                battery_power: parseFloat(power.toFixed(2)),
+                temperature: 25 + (Math.random() - 0.5) * 5,
+                humidity: 60 + (Math.random() - 0.5) * 10,
+                gps_latitude: -5.3971 + (Math.random() - 0.5) * 0.001,
+                gps_longitude: 105.2663 + (Math.random() - 0.5) * 0.001,
+                altitude: 100 + (Math.random() - 0.5) * 10,
+                signal_strength: -50 + (Math.random() - 0.5) * 10,
+                satellites: Math.floor(8 + Math.random() * 4),
+                connection_status: 'demo'
+            };
+            
+            this.processTelemetryData(demoData);
+        }, 1000);
+        
+        // Auto stop demo after 30 seconds if real data comes
+        setTimeout(() => {
+            this.stopDemoData();
+        }, 30000);
+    }
+
+    stopDemoData() {
+        if (this.demoInterval) {
+            clearInterval(this.demoInterval);
+            this.demoInterval = null;
+            console.log('🛑 Demo data stopped');
+            this.showNotification('Demo mode stopped', 'info');
+        }
     }
 }
 
