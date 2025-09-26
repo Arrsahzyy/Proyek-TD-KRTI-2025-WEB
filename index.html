@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Swarakarsa ITERA Technology Development Team- UAV Dashboard</title>
+    <link rel="icon" type="image/png" href="assets/logo swarnakasa.png">
+    <link rel="shortcut icon" type="image/png" href="assets/logo swarnakasa.png">
+    <link rel="apple-touch-icon" href="assets/logo swarnakasa.png">
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="loading-screen">
+        <div class="loading-content">
+            <div class="loading-spinner">
+                <div class="spinner-plane">
+                    <i class="fas fa-plane"></i>
+                </div>
+                <div class="spinner-orbit"></div>
+            </div>
+            <h2>Initializing UAV Dashboard</h2>
+            <p id="loading-text">Loading system components...</p>
+            <div class="loading-progress">
+                <div class="progress-bar" id="progress-bar"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="header-container">
+            <div class="logo">
+                <div class="logo-icon">
+                    <img src="assets/logo swarnakasa.png" alt="KRTI Logo" class="logo-image">
+                </div>
+                <div class="logo-text">
+                    <h1>Swarnakasa ITERA Technology Development Team</h1>
+                    <span class="subtitle">Lampaui Batas, Generasi Emas Mengudara</span>
+                </div>
+            </div>
+            <div class="header-status">
+                <div class="connection-indicators">
+                    <div class="status-item" id="cloud-status">
+                        <div class="status-dot offline pulsing"></div>
+                        <span class="status-text">Cloud Disconnected</span>
+                    </div>
+                    <div class="status-item" id="esp32-indicator">
+                        <i class="fas fa-microchip"></i>
+                        <span>ESP32</span>
+                        <div class="indicator-light" id="esp32-light"></div>
+                    </div>
+                    <div class="status-item wifi-signal">
+                        <i class="fas fa-wifi"></i>
+                        <div class="signal-bars">
+                            <span class="bar bar1"></span>
+                            <span class="bar bar2"></span>
+                            <span class="bar bar3"></span>
+                            <span class="bar bar4"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="system-time" id="system-time"></div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Notification Container -->
+    <div id="notification-container" class="notification-container"></div>
+    
+    <!-- ESP32 System Status Panel (Hidden by default) -->
+    <div id="esp32-system-status-panel" class="esp32-status-panel" style="display: none;">
+        <div class="esp32-status-header">
+            <h4><i class="fas fa-microchip"></i> ESP32 System Status</h4>
+            <button class="close-status-panel" onclick="document.getElementById('esp32-system-status-panel').style.display='none'">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div id="esp32-system-status" class="esp32-status-content">
+            <div class="esp32-status-item">
+                <span>Status: Checking...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Dashboard -->
+    <main class="dashboard">
+        <!-- Left Panel - Flight Path -->
+        <section class="left-panel">
+            <div class="flight-path-card fixed-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-map-marked-alt"></i> Realtime Flight Path</h3>
+                    <div class="card-controls">
+                        <button class="control-btn" id="fullscreen-map" title="Fullscreen">
+                            <i class="fas fa-expand"></i>
+                        </button>
+                        <button class="control-btn" id="refresh-map" title="Refresh">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="map-container" class="map-container">
+                    <div id="flight-map" class="flight-map"></div>
+                    <!-- Map Control Buttons -->
+                    <div class="map-controls">
+                        <button class="map-btn" id="zoom-in" title="Zoom In">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                        <button class="map-btn" id="zoom-out" title="Zoom Out">
+                            <i class="fas fa-minus"></i>
+                        </button>
+                        <button class="map-btn" id="center-map" title="Center Map">
+                            <i class="fas fa-crosshairs"></i>
+                        </button>
+                        <button class="map-btn" id="toggle-path" title="Toggle Flight Path">
+                            <i class="fas fa-route"></i>
+                        </button>
+                    </div>
+                    <!-- Map Status Indicator -->
+                    <div class="map-status">
+                        <div class="gps-status" id="gps-status">
+                            <i class="fas fa-satellite-dish"></i>
+                            <span>GPS: No Signal</span>
+                        </div>
+                    </div>
+                    <!-- Map Legend -->
+                    <div class="map-legend">
+                        <div class="legend-item">
+                            <i class="fas fa-plane legend-icon pulsing"></i>
+                            <span>UAV Position</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-line animated"></div>
+                            <span>Flight Path</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-marker home"></div>
+                            <span>Home Position</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Center Panel - Power Graph & Data -->
+        <section class="center-panel">
+            <!-- Power System Graph - Electrical Monitoring -->
+            <div class="power-graph-card fixed-card electrical-theme">
+                <div class="card-header">
+                    <h3><i class="fas fa-bolt"></i> Electrical Monitoring</h3>
+                    <div class="card-controls">
+                        <button class="control-btn" id="pause-chart" title="Pause"><i class="fas fa-pause"></i></button>
+                        <button class="control-btn" id="resume-chart" title="Resume"><i class="fas fa-play"></i></button>
+                        <button class="control-btn" id="reset-chart" title="Reset"><i class="fas fa-redo"></i></button>
+                        <button class="control-btn" id="export-csv" title="Export CSV"><i class="fas fa-file-csv"></i></button>
+                        <button class="control-btn" id="export-json" title="Export JSON"><i class="fas fa-file-code"></i></button>
+                    </div>
+                </div>
+                <div class="stats-row">
+                    <div class="stat-card voltage">
+                        <i class="fas fa-battery-full"></i>
+                        <div class="stat-label">Rata-rata Voltase</div>
+                        <div class="stat-value" id="avg-voltage">0 V</div>
+                    </div>
+                    <div class="stat-card current">
+                        <i class="fas fa-bolt"></i>
+                        <div class="stat-label">Rata-rata Arus</div>
+                        <div class="stat-value" id="avg-current">0 A</div>
+                    </div>
+                    <div class="stat-card power">
+                        <i class="fas fa-fire"></i>
+                        <div class="stat-label">Rata-rata Daya</div>
+                        <div class="stat-value" id="avg-power">0 W</div>
+                    </div>
+                    <div class="stat-card status">
+                        <i class="fas fa-shield-alt"></i>
+                        <div class="stat-label">Status Listrik</div>
+                        <div class="stat-value" id="electric-status">Normal</div>
+                    </div>
+                </div>
+                <div class="graph-container">
+                    <canvas id="powerChart" class="power-chart"></canvas>
+                    
+                    <!-- Fallback display if chart fails to load -->
+                    <div id="chart-fallback" class="chart-fallback" style="display: none;">
+                        <div class="fallback-content">
+                            <div class="fallback-item">
+                                <span class="fallback-label">Voltage:</span>
+                                <span id="voltage-display" class="fallback-value">-- V</span>
+                            </div>
+                            <div class="fallback-item">
+                                <span class="fallback-label">Current:</span>
+                                <span id="current-display" class="fallback-value">-- A</span>
+                            </div>
+                            <div class="fallback-item">
+                                <span class="fallback-label">Power:</span>
+                                <span id="power-display" class="fallback-value">-- W</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="alert-system" id="alert-system"></div>
+                </div>
+            </div>
+
+            <!-- Telemetry Data Grid -->
+            <div class="telemetry-data fixed-card">
+                <div class="data-header">
+                    <h4><i class="fas fa-tachometer-alt"></i> Telemetry Data</h4>
+                    <div class="data-refresh">
+                        <span class="refresh-indicator" id="data-refresh">●</span>
+                        <span class="refresh-text">Live</span>
+                    </div>
+                </div>
+                
+                <!-- Row 1 -->
+                <div class="data-row">
+                    <div class="data-card hoverable" data-tooltip="Current UAV Speed">
+                        <div class="data-icon">
+                            <i class="fas fa-tachometer-alt"></i>
+                        </div>
+                        <div class="data-content">
+                            <div class="data-label">Speed</div>
+                            <div class="data-value animate-number" id="telemetry-speed">0 km/h</div>
+                        </div>
+                        <div class="data-trend" id="speed-trend">
+                            <i class="fas fa-arrow-up"></i>
+                        </div>
+                    </div>
+                    <div class="data-card hoverable" data-tooltip="GPS Longitude">
+                        <div class="data-icon">
+                            <i class="fas fa-map-pin"></i>
+                        </div>
+                        <div class="data-content">
+                            <div class="data-label">Longitude</div>
+                            <div class="data-value animate-number" id="longitude">105.2663°</div>
+                        </div>
+                        <div class="data-trend" id="lon-trend">
+                            <i class="fas fa-minus"></i>
+                        </div>
+                    </div>
+                    <div class="data-card hoverable" data-tooltip="GPS Latitude">
+                        <div class="data-icon">
+                            <i class="fas fa-crosshairs"></i>
+                        </div>
+                        <div class="data-content">
+                            <div class="data-label">Latitude</div>
+                            <div class="data-value animate-number" id="latitude">-5.3971°</div>
+                        </div>
+                        <div class="data-trend" id="lat-trend">
+                            <i class="fas fa-minus"></i>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Row 2 -->
+                <div class="data-row">
+                    <div class="data-card hoverable critical" data-tooltip="Battery Voltage">
+                        <div class="data-icon">
+                            <i class="fas fa-battery-three-quarters"></i>
+                        </div>
+                        <div class="data-content">
+                            <div class="data-label">Voltage</div>
+                            <div class="data-value animate-number" id="voltage">11.8 V</div>
+                        </div>
+                        <div class="data-trend" id="voltage-trend">
+                            <i class="fas fa-arrow-down"></i>
+                        </div>
+                    </div>
+                    <div class="data-card hoverable warning" data-tooltip="Current Draw">
+                        <div class="data-icon">
+                            <i class="fas fa-bolt"></i>
+                        </div>
+                        <div class="data-content">
+                            <div class="data-label">Current</div>
+                            <div class="data-value animate-number" id="current">7.5 A</div>
+                        </div>
+                        <div class="data-trend" id="current-trend">
+                            <i class="fas fa-arrow-up"></i>
+                        </div>
+                    </div>
+                    <div class="data-card hoverable" data-tooltip="Power Consumption">
+                        <div class="data-icon">
+                            <i class="fas fa-fire"></i>
+                        </div>
+                        <div class="data-content">
+                            <div class="data-label">Power</div>
+                            <div class="data-value animate-number" id="power">88.5 W</div>
+                        </div>
+                        <div class="data-trend" id="power-trend">
+                            <i class="fas fa-arrow-up"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Panel - About & Emergency -->
+        <section class="right-panel">
+            <div class="about-card fixed-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-info-circle"></i> CONTROL PANEL</h3>
+                </div>
+                <div class="about-content">
+                    <button id="btnTeamInfo" class="team-btn hoverable">
+                        <i class="fas fa-users"></i>
+                        <span>Team Info</span>
+                    </button>
+                    
+                    <div class="or-divider">
+                        <span>EMERGENCY</span>
+                    </div>
+                    
+                    <div class="emergency-section">
+                        <div class="emergency-button">
+                            <button id="btnEmergencyCutOff" class="emergency-cutoff pulsing-red">
+                                <div class="emergency-icon">
+                                    <i class="fas fa-power-off"></i>
+                                </div>
+                                <div class="emergency-text">
+                                    EMERGENCY<br>
+                                    <span class="cut-text">CUT OFF</span>
+                                </div>
+                            </button>
+                            <div id="emergencyStatus" class="emergency-status-label" style="display: none;">
+                                <span class="status-text">Relay OFF</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Status -->
+            <div class="system-status-card fixed-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-server"></i> System Status</h3>
+                    <div class="status-indicator" id="system-health">
+                        <span class="health-dot"></span>
+                    </div>
+                </div>
+                <div class="status-items">
+                    <div class="status-item animated-status">
+                        <div class="status-left">
+                            <i class="fas fa-microchip status-icon"></i>
+                            <span class="status-label">ESP32:</span>
+                        </div>
+                        <span id="esp32-status" class="status-value offline">Offline</span>
+                        <div class="status-pulse" id="esp32-pulse"></div>
+                    </div>
+                    <div class="status-item animated-status">
+                        <div class="status-left">
+                            <i class="fas fa-link status-icon"></i>
+                            <span class="status-label">Connection:</span>
+                        </div>
+                        <span id="connection-mode" class="status-value">--</span>
+                        <div class="status-pulse" id="connection-pulse"></div>
+                    </div>
+                    <div class="status-item animated-status">
+                        <div class="status-left">
+                            <i class="fas fa-exchange-alt status-icon"></i>
+                            <span class="status-label">Packets:</span>
+                            <div class="packet-counter" id="packet-animation"></div>
+                        </div>
+                        <span id="data-packets" class="status-value">--</span>
+                    </div>
+                    <div class="status-item animated-status">
+                        <div class="status-left">
+                            <i class="fas fa-signal status-icon"></i>
+                            <span class="status-label">Signal:</span>
+                        </div>
+                        <span id="signal-strength" class="status-value">--</span>
+                        <div class="signal-indicator" id="signal-bars">
+                            <span class="signal-bar"></span>
+                            <span class="signal-bar"></span>
+                            <span class="signal-bar"></span>
+                            <span class="signal-bar"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Activity Log (Compact) -->
+            <div class="activity-log-card fixed-card">
+                <div class="card-header">
+                    <h4><i class="fas fa-list-ul"></i> Activity Log</h4>
+                    <div class="log-controls">
+                        <button class="control-btn-small" id="clear-log" title="Clear Log">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        <button class="control-btn-small" id="export-log" title="Export Log">
+                            <i class="fas fa-file-export"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="activity-log" class="activity-log">
+                    <!-- Activity entries will be populated dynamically -->
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Notification System -->
+    <div id="notification-container" class="notification-container"></div>
+
+    <!-- Tooltip -->
+    <div id="tooltip" class="tooltip"></div>
+
+    <!-- Modal for Settings -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-cogs"></i> Dashboard Settings</h3>
+                <button class="close-btn" id="close-settings">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-group">
+                    <label>Update Interval (ms):</label>
+                    <input type="range" id="update-interval" min="100" max="5000" value="1000">
+                    <span id="interval-value">1000ms</span>
+                </div>
+                <div class="setting-group">
+                    <label>Chart Data Points:</label>
+                    <input type="range" id="chart-points" min="20" max="100" value="50">
+                    <span id="points-value">50</span>
+                </div>
+                <div class="setting-group">
+                    <label>Theme:</label>
+                    <select id="theme-selector">
+                        <option value="dark">Dark</option>
+                        <option value="light">Light</option>
+                        <option value="auto">Auto</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-section">
+                <span>&copy; 2025 UAV Dashboard - KRTI TD SWARNAKASA</span>
+            </div>
+            <div class="footer-section">
+                <span>ESP32 Compatible | Real-time Telemetry</span>
+            </div>
+            <div class="footer-section">
+                <span id="client-count">0 clients connected</span>
+                <button class="settings-btn" id="open-settings" title="Settings">
+                    <i class="fas fa-cogs"></i>
+                </button>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Emergency Confirmation Modal -->
+    <div id="emergencyConfirmModal" class="control-modal-overlay" style="display: none;">
+        <div class="control-modal" role="dialog" aria-labelledby="emergency-modal-title" aria-describedby="emergency-modal-desc">
+            <div class="control-modal-content">
+                <div class="modal-icon emergency-icon-ring">
+                    <i class="fas fa-power-off"></i>
+                </div>
+                <h2 id="emergency-modal-title">Konfirmasi Emergency Cut Off</h2>
+                <p id="emergency-modal-desc" class="modal-subtitle">Tindakan ini akan memutus relay E-Cut-Off dan menghentikan sistem sementara.</p>
+                <div class="modal-warning">
+                    <small>Pastikan UAV dalam kondisi aman sebelum melanjutkan.</small>
+                </div>
+                <div class="modal-actions">
+                    <button id="emergencyCancel" class="btn-ghost">
+                        <i class="fas fa-times"></i>
+                        Batal
+                    </button>
+                    <button id="emergencyConfirm" class="btn-danger">
+                        <i class="fas fa-power-off"></i>
+                        Matikan Sekarang
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Emergency Process Modal -->
+    <div id="emergencyProcessModal" class="control-modal-overlay" style="display: none;">
+        <div class="control-modal" role="dialog" aria-labelledby="emergency-process-title">
+            <div class="control-modal-content process-content">
+                <div id="emergencyProcessContent">
+                    <!-- Content will be dynamically updated -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Team Info Panel -->
+    <div id="teamInfoPanel" class="team-info-panel" style="display: none;">
+        <div class="team-panel-overlay"></div>
+        <div class="team-panel-content" role="complementary">
+            <div class="team-panel-header">
+                <h3>Team Info</h3>
+                <button id="teamPanelClose" class="panel-close-btn" aria-label="Tutup panel">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="team-panel-body">
+                <div class="team-identity">
+                    <h4>Swarnakasa ITERA Technology Development Team</h4>
+                    <p class="team-tagline">Lampaui Batas, Generasi Emas Mengudara</p>
+                </div>
+                <div class="team-focus">
+                    <h5>Fokus Tim:</h5>
+                    <p>UAV, sistem kelistrikan, IoT, dan analitik data</p>
+                </div>
+                <div class="team-activities">
+                    <h5>Kegiatan Inti:</h5>
+                    <ul>
+                        <li>Sistem Monitoring Real Time Menggunakan Website Dashboard</li>
+                        <li>Pemantauan sistem kelistrikan real-time</li>
+                        <li>Pengolahan data penerbangan dan telemetri</li>
+                        <li>Keselamatan operasional UAV melalui fitur emergency cut off</li>
+                        <li>Integrasi Sistem Charging otomatis menggunakan panel surya sebagai sumber energy alternatif</li>
+                    </ul>
+                </div>
+                <div class="team-contact">
+                    <h5>Kontak:</h5>
+                    <p>Email: swarnakasa@itera.ac.id</p>
+                </div>
+            </div>
+            <div class="team-panel-footer">
+                <button id="teamPanelCloseBtn" class="btn-ghost">
+                    <i class="fas fa-times"></i>
+                    Tutup
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" class="toast-container">
+        <!-- Toast notifications will be dynamically added here -->
+    </div>
+
+    <!-- Scripts -->
+    <!-- Chart.js & Adapter -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <!-- Control Panel System -->
+    <script src="control-panel.js"></script>
+    <!-- Include tests in development -->
+    <script>
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            const script = document.createElement('script');
+            script.src = 'control-panel-tests.js';
+            document.head.appendChild(script);
+        }
+    </script>
+    <script src="script.js"></script>
+    <script>
+    // --- Electrical Monitoring Chart ---
+    const ctx = document.getElementById('powerChart').getContext('2d');
+    let appState = { chartPaused: false, chartData: [], maxPoints: 20 };
+    let sensorChart;
+    function createChart() {
+        if (sensorChart) { 
+            console.log('📊 [CREATE] Chart already exists');
+            window.chartReady = true;
+            return; 
+        }
+        
+        console.log('📊 [CREATE] Creating new Chart.js instance...');
+        
+        // Pre-populate labels & zero data to stabilize layout before real data arrives
+        const placeholderCount = appState.maxPoints;
+        const placeholderLabels = Array.from({length: placeholderCount}, (_,i) => '');
+        const zeros = Array.from({length: placeholderCount}, () => null); // use null so line starts only when real data comes
+        
+        sensorChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: placeholderLabels,
+                datasets: [
+                    {
+                        label: 'Voltase (V)',
+                        borderColor: '#F43F5E',
+                        backgroundColor: 'rgba(244,63,94,0.1)',
+                        data: [...zeros],
+                        yAxisID: 'y',
+                        tension: 0.4,
+                        pointRadius: 2,
+                        fill: false,
+                        borderWidth: 2,
+                        hidden: false,
+                    },
+                    {
+                        label: 'Arus (A)',
+                        borderColor: '#60A5FA',
+                        backgroundColor: 'rgba(96,165,250,0.1)',
+                        data: [...zeros],
+                        yAxisID: 'y',
+                        tension: 0.4,
+                        pointRadius: 2,
+                        fill: false,
+                        borderWidth: 2,
+                        hidden: false,
+                    },
+                    {
+                        label: 'Daya (W)',
+                        borderColor: '#E6C70E',
+                        backgroundColor: 'rgba(230,199,14,0.1)',
+                        data: [...zeros],
+                        yAxisID: 'y1',
+                        tension: 0.4,
+                        pointRadius: 2,
+                        fill: false,
+                        borderWidth: 2,
+                        hidden: false,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 600 },
+                interaction: { mode: 'nearest', axis: 'x', intersect: false },
+                layout: {
+                    padding: {
+                        left: 10,
+                        right: 10,
+                        top: 20,
+                        bottom: 30 // Extra bottom padding for timestamps
+                    }
+                },
+                plugins: {
+                    legend: { 
+                        display: true,
+                        labels: { 
+                            color: '#E6EDF6',
+                            font: { family: 'Inter', size: 13 } 
+                        } 
+                    },
+                    tooltip: {
+                        enabled: true,
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                let value = context.parsed.y;
+                                if (label.includes('Voltase')) return `${value.toFixed(2)} V`;
+                                if (label.includes('Arus')) return `${value.toFixed(2)} A`;
+                                if (label.includes('Daya')) return `${value.toFixed(2)} W`;
+                                return value;
+                            }
+                        },
+                        backgroundColor: '#0F2747',
+                        titleFont: { family: 'Inter', size: 14 },
+                        bodyFont: { family: 'Inter', size: 13 },
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'category',
+                        ticks: { 
+                            color: '#E6EDF6', 
+                            font: { family: 'Inter', size: 11 },
+                            maxRotation: 45, // Rotate labels if needed
+                            minRotation: 0,
+                            padding: 10 // Add padding between ticks and axis
+                        },
+                        grid: { color: 'rgba(42,67,105,0.3)' },
+                        offset: true, // Add offset to prevent label clipping
+                        bounds: 'ticks' // Ensure ticks are within bounds
+                    },
+                    y: {
+                        position: 'left',
+                        min: 0, max: 20,
+                        title: { display: true, text: 'Voltase (V) / Arus (A)', color: '#E6EDF6', font: { family: 'Inter' } },
+                        ticks: { color: '#F43F5E', font: { family: 'Inter' } },
+                        grid: { color: 'rgba(244,63,94,0.15)' }
+                    },
+                    y1: {
+                        position: 'right',
+                        min: 0, max: 200,
+                        title: { display: true, text: 'Daya (W)', color: '#E6EDF6', font: { family: 'Inter' } },
+                        ticks: { color: '#E6C70E', font: { family: 'Inter' } },
+                        grid: { drawOnChartArea: false }
+                    }
+                }
+            }
+        });
+        
+        window.chartReady = true;
+        console.log('✅ [CREATE] Chart.js instance created and marked as ready');
+    }
+    createChart();
+
+    // --- Chart Update Function ---
+    function updateChart(label, voltageData, currentData, powerData) {
+        if (appState.chartPaused) return;
+        
+        // Validate and parse data to ensure they are numbers
+        const voltage = parseFloat(voltageData) || 0;
+        const current = parseFloat(currentData) || 0;
+        const power = parseFloat(powerData) || 0;
+        
+        console.log('📊 [UPDATE] Received data:', { voltage, current, power });
+        
+        // Ensure chart exists before updating
+        if (!sensorChart) {
+            console.warn('⚠️ [UPDATE] Chart not ready, skipping update');
+            return;
+        }
+        
+        // Add to chart
+        sensorChart.data.labels.push(label);
+        sensorChart.data.datasets[0].data.push(voltage);
+        sensorChart.data.datasets[1].data.push(current);
+        sensorChart.data.datasets[2].data.push(power);
+        
+        // Add to appState with validated data
+        appState.chartData.push({ 
+            timestamp: label, 
+            voltage: voltage, 
+            current: current, 
+            power: power 
+        });
+        
+        // Debug log with validated data
+        console.log('📊 [UPDATE] Chart data updated:', { voltage, current, power });
+        console.log('📊 [UPDATE] Total data points:', appState.chartData.length);
+        
+        // Keep chart clean, show last 20 data points
+        const maxPoints = appState.maxPoints;
+        if (sensorChart.data.labels.length > maxPoints) {
+            sensorChart.data.labels.shift();
+            sensorChart.data.datasets.forEach(dataset => dataset.data.shift());
+            appState.chartData.shift();
+        }
+        
+        // Chart update only - electrical stats handled by ElectricalStatsManager
+        sensorChart.update('none');
+        
+        // Log chart activity
+        if (window.activityLogger) {
+            window.activityLogger.logChartUpdate('Electrical Monitoring');
+        }
+        
+        // DISABLED: updateStats() call - handled by ElectricalStatsManager
+        console.log('📊 [UPDATE] Chart updated, electrical stats handled by ElectricalStatsManager');
+        checkAlerts(voltage, current, power);
+    }
+
+    // Function to update chart from external data (dari script.js)
+    window.updateElectricalChart = function(voltage, current, power) {
+        console.log('⚡ [MAIN] Received electrical data:', { voltage, current, power });
+        
+        // Ensure Chart.js is ready
+        if (!sensorChart) {
+            console.log('⚠️ [MAIN] Chart not ready, initializing...');
+            createChart();
+        }
+        
+        if (sensorChart) {
+            console.log('⚡ [MAIN] Chart exists, calling updateChart...');
+            // Format timestamp to show only HH:MM:SS for better display
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            updateChart(timeString, voltage, current, power);
+        } else {
+            console.error('❌ [MAIN] Chart still not available after initialization attempt');
+        }
+    };
+
+    // Global flag untuk memastikan chart sudah ready
+    window.chartReady = false;
+    
+    // Enhanced telemetry integration - listen for telemetry updates from script.js
+    window.addEventListener('telemetryUpdate', function(event) {
+        const data = event.detail;
+        if (data && data.battery_voltage !== undefined) {
+            console.log('📡 [EVENT] Telemetry event received in Chart.js:', data);
+            window.updateElectricalChart(
+                parseFloat(data.battery_voltage) || 0,
+                parseFloat(data.battery_current) || 0, 
+                parseFloat(data.battery_power) || 0
+            );
+        }
+    });    // Direct call dari script.js dengan robust error handling
+    window.updateElectricalMonitoring = function(telemetryData) {
+        if (!telemetryData) {
+            console.log('⚠️ [DIRECT] No telemetry data provided');
+            return;
+        }
+        
+        console.log('🔌 [DIRECT] Direct telemetry update:', telemetryData);
+        
+        const voltage = parseFloat(telemetryData.battery_voltage) || 0;
+        const current = parseFloat(telemetryData.battery_current) || 0;
+        const power = parseFloat(telemetryData.battery_power) || 0;
+        
+        console.log('🔌 [DIRECT] Parsed values:', { voltage, current, power });
+        
+        // Log telemetry activity
+        if (window.activityLogger) {
+            window.activityLogger.logTelemetryUpdate({
+                voltage: voltage,
+                current: current,
+                power: power,
+                timestamp: new Date().toISOString()
+            });
+        }
+        
+        // Validasi data - jika ada nilai yang valid
+        if (voltage > 0 || current > 0 || power > 0) {
+            // Pastikan chart ready sebelum update
+            if (!window.chartReady) {
+                console.log('🔌 [DIRECT] Chart not ready, waiting...');
+                setTimeout(() => {
+                    window.updateElectricalChart(voltage, current, power);
+                }, 500);
+            } else {
+                console.log('🔌 [DIRECT] Chart ready, calling updateElectricalChart');
+                window.updateElectricalChart(voltage, current, power);
+            }
+            
+            // DISABLED: Force stats update - handled by ElectricalStatsManager
+            console.log('🔌 [DIRECT] ElectricalStatsManager handles stats update');
+        } else {
+            console.log('⚠️ [DIRECT] All values are zero or invalid:', { voltage, current, power });
+            
+            // Even if data is zero, still try to update the chart to show zero values
+            if (window.chartReady && window.updateElectricalChart) {
+                console.log('🔌 [DIRECT] Updating chart with zero values');
+                window.updateElectricalChart(voltage, current, power);
+            }
+        }
+    };
+
+    // DISABLED: Force stats monitoring yang menyebabkan konflik
+    // ElectricalStatsManager handles all electrical stats updates
+    console.log('� [CHART] Chart monitoring disabled - ElectricalStatsManager handles electrical stats');
+
+    // --- Data Simulation (Backup jika tidak ada data dari script.js) ---
+    let simInterval = setInterval(() => {
+        if (!appState.chartPaused && (!window.demoDataGenerator || !window.demoDataGenerator.isRunning)) {
+            const voltage = +(11.8 + (Math.random() - 0.5) * 1.6).toFixed(2); // 11.0-12.6V untuk UAV
+            const current = +(5 + Math.random() * 8).toFixed(2); // 5-13A untuk UAV
+            const power = +(voltage * current).toFixed(2);
+            
+            console.log('🎲 [SIM] Using simulated data:', { voltage, current, power });
+            // Format timestamp to show only HH:MM:SS for better display
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            updateChart(timeString, voltage, current, power);
+        }
+    }, 3000); // Every 3 seconds for more frequent updates
+    
+    // DIREKTA HTTP POLLING as backup for socket.io
+    let httpPollingInterval = setInterval(async () => {
+        try {
+            const response = await fetch('/api/telemetry');
+            if (response.ok) {
+                const data = await response.json();
+                console.log('🌐 [HTTP] Received data via HTTP polling:', data);
+                
+                if (data && data.battery_voltage !== undefined) {
+                    // Disable simulation when real data comes in
+                    if (simInterval) {
+                        clearInterval(simInterval);
+                        simInterval = null;
+                        console.log('🎲 [SIM] Simulation disabled - real data received via HTTP');
+                    }
+                    
+                    window.updateElectricalChart(
+                        parseFloat(data.battery_voltage) || 0,
+                        parseFloat(data.battery_current) || 0,
+                        parseFloat(data.battery_power) || 0
+                    );
+                }
+            }
+        } catch (error) {
+            console.log('🌐 [HTTP] HTTP polling failed:', error.message);
+            // Don't spam errors, this is just a backup
+        }
+    }, 5000); // Poll every 5 seconds as backup
+
+    // DISABLED: Force initial data - ElectricalStatsManager will handle real data
+    console.log('🚀 [INIT] Waiting for real telemetry data via ElectricalStatsManager');
+
+    // --- Chart Controls ---
+    document.getElementById('pause-chart').onclick = () => { 
+        appState.chartPaused = true; 
+        if (window.activityLogger) {
+            window.activityLogger.addActivity('chart', 'Chart paused by user');
+        }
+    };
+    document.getElementById('resume-chart').onclick = () => { 
+        appState.chartPaused = false; 
+        if (window.activityLogger) {
+            window.activityLogger.addActivity('chart', 'Chart resumed by user');
+        }
+    };
+    document.getElementById('reset-chart').onclick = () => {
+        sensorChart.data.labels = [];
+        sensorChart.data.datasets.forEach(ds => ds.data = []);
+        appState.chartData = [];
+        sensorChart.update();
+        if (window.activityLogger) {
+            window.activityLogger.addActivity('chart', 'Chart reset by user');
+        }
+        // DISABLED: updateStats() - handled by ElectricalStatsManager
+        console.log('📊 [RESET] Chart reset, electrical stats managed separately');
+        document.getElementById('alert-system').innerHTML = '';
+    };
+    document.getElementById('export-csv').onclick = () => {
+        let csv = 'timestamp,voltage,current,power\n' + appState.chartData.map(d => `${d.timestamp},${d.voltage},${d.current},${d.power}`).join('\n');
+        downloadFile(csv, 'power_data.csv', 'text/csv');
+    };
+    document.getElementById('export-json').onclick = () => {
+        let json = JSON.stringify(appState.chartData, null, 2);
+        downloadFile(json, 'power_data.json', 'application/json');
+    };
+    function downloadFile(data, filename, type) {
+        const blob = new Blob([data], { type });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+    }
+
+    // --- Statistics --- 
+    // NOTE: This function is now DISABLED to prevent conflict with ElectricalStatsManager
+    // ElectricalStatsManager in script.js handles electrical stats exclusively
+    function updateStats() {
+        console.log('📊 [CHART-STATS] Chart statistics function called (DISABLED for electrical stats)');
+        
+        // This function used to calculate electrical stats but now only handles chart display
+        // Electrical stats are handled by ElectricalStatsManager in script.js
+        
+        // Optional: You can add non-electrical chart statistics here if needed
+        const arr = appState.chartData;
+        console.log('📊 [CHART-STATS] Chart has', arr.length, 'data points (for chart display only)');
+        
+        // DO NOT UPDATE ELECTRICAL STATS HERE - handled by ElectricalStatsManager
+        return;
+    }
+
+    // --- Alert System ---
+    function checkAlerts(voltage, current, power) {
+        let alerts = [];
+        if (voltage < 10.5) alerts.push({ type: 'warning', msg: 'Voltage drop! < 10.5V' });
+        if (voltage > 13.5) alerts.push({ type: 'danger', msg: 'Overvoltage! > 13.5V' });
+        if (current > 15) alerts.push({ type: 'warning', msg: 'Overcurrent! > 15A' });
+        if (power > 180) alerts.push({ type: 'danger', msg: 'Overpower! > 180W' });
+        const alertBox = document.getElementById('alert-system');
+        alertBox.innerHTML = alerts.map(a => `<div class="alert ${a.type}"><i class="fas fa-exclamation-triangle"></i> ${a.msg}</div>`).join('');
+    }
+
+    // --- Initialize Chart ---
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('🚀 [INIT] DOM Content Loaded, initializing chart...');
+        
+        // Ensure all DOM elements exist
+        const requiredElements = ['avg-voltage', 'avg-current', 'avg-power', 'electric-status'];
+        let missingElements = [];
+        
+        requiredElements.forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) {
+                missingElements.push(id);
+            } else {
+                console.log(`✅ [INIT] Found element: ${id}`);
+            }
+        });
+        
+        if (missingElements.length > 0) {
+            console.error('❌ [INIT] Missing required elements:', missingElements);
+        }
+        
+        createChart(); // guarded
+        console.log('✅ [INIT] Electrical monitoring chart initialized');
+        
+        // DISABLED: Force initial data dan stats - ElectricalStatsManager handles this
+        console.log('🚀 [INIT] Chart initialized, electrical stats handled by ElectricalStatsManager');
+        
+        // DISABLED: Health check dan emergency stats forcing 
+        // ElectricalStatsManager handles all electrical stats consistently
+        console.log('� [HEALTH] Health monitoring disabled - ElectricalStatsManager manages stats');
+    });
+
+    // --- Activity Logger System ---
+    class ActivityLogger {
+        constructor() {
+            console.log('📊 [ACTIVITY] Initializing ActivityLogger...');
+            this.logContainer = document.getElementById('activity-log');
+            this.clearBtn = document.getElementById('clear-log');
+            this.exportBtn = document.getElementById('export-log');
+            this.maxEntries = 100;
+            this.logs = [];
+            
+            console.log('📊 [ACTIVITY] Log container found:', !!this.logContainer);
+            console.log('📊 [ACTIVITY] Clear button found:', !!this.clearBtn);
+            console.log('📊 [ACTIVITY] Export button found:', !!this.exportBtn);
+            
+            this.initEventListeners();
+            this.loadStoredLogs();
+            this.addActivity('system', 'Dashboard initialized successfully');
+            
+            console.log('📊 [ACTIVITY] ActivityLogger initialization completed');
+        }
+
+        initEventListeners() {
+            this.clearBtn?.addEventListener('click', () => this.clearLogs());
+            this.exportBtn?.addEventListener('click', () => this.exportLogs());
+        }
+
+        addActivity(type = 'info', message = '', details = null) {
+            console.log('📊 [ACTIVITY] Adding activity:', { type, message, details });
+            
+            const timestamp = new Date();
+            const entry = {
+                id: Date.now() + Math.random(),
+                timestamp: timestamp,
+                type: type,
+                message: message,
+                details: details
+            };
+
+            this.logs.unshift(entry);
+
+            // Limit entries
+            if (this.logs.length > this.maxEntries) {
+                this.logs = this.logs.slice(0, this.maxEntries);
+            }
+
+            this.renderLogEntry(entry);
+            this.saveToStorage();
+            
+            console.log('📊 [ACTIVITY] Activity added successfully. Total entries:', this.logs.length);
+        }
+
+        renderLogEntry(entry) {
+            console.log('📊 [ACTIVITY] Rendering log entry:', entry);
+            
+            if (!this.logContainer) {
+                console.error('📊 [ACTIVITY] Log container not found!');
+                return;
+            }
+            
+            const logElement = document.createElement('div');
+            logElement.className = `log-entry log-${entry.type}`;
+            logElement.dataset.id = entry.id;
+
+            const timeStr = entry.timestamp.toLocaleTimeString('id-ID', { 
+                hour12: false, 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                second: '2-digit' 
+            });
+
+            const icon = this.getTypeIcon(entry.type);
+
+            logElement.innerHTML = `
+                <span class="log-time">[${timeStr}]</span>
+                <span class="log-type-icon">${icon}</span>
+                <span class="log-message">${entry.message}</span>
+                <div class="log-indicator log-indicator-${entry.type}"></div>
+            `;
+
+            // Always prepend to container (newest first)
+            this.logContainer.insertBefore(logElement, this.logContainer.firstChild);
+            
+            console.log('📊 [ACTIVITY] Log entry rendered successfully');
+
+            // Remove excess visual entries
+            const entries = this.logContainer.querySelectorAll('.log-entry');
+            if (entries.length > 20) { // Show max 20 visual entries
+                entries[entries.length - 1].remove();
+            }
+
+            // Auto scroll to top for new entries
+            this.logContainer.scrollTop = 0;
+        }
+
+        getTypeIcon(type) {
+            const icons = {
+                'system': '<i class="fas fa-cog"></i>',
+                'success': '<i class="fas fa-check-circle"></i>',
+                'warning': '<i class="fas fa-exclamation-triangle"></i>',
+                'error': '<i class="fas fa-exclamation-circle"></i>',
+                'emergency': '<i class="fas fa-exclamation-triangle"></i>',
+                'relay': '<i class="fas fa-power-off"></i>',
+                'telemetry': '<i class="fas fa-satellite-dish"></i>',
+                'map': '<i class="fas fa-map-marker-alt"></i>',
+                'chart': '<i class="fas fa-chart-line"></i>',
+                'connection': '<i class="fas fa-wifi"></i>',
+                'info': '<i class="fas fa-info-circle"></i>'
+            };
+            return icons[type] || icons['info'];
+        }
+
+        clearLogs() {
+            if (confirm('Hapus semua log aktivitas?')) {
+                this.logs = [];
+                this.logContainer.innerHTML = '';
+                this.saveToStorage();
+                this.addActivity('system', 'Activity log cleared');
+            }
+        }
+
+        exportLogs() {
+            if (this.logs.length === 0) {
+                alert('Tidak ada log untuk diekspor');
+                return;
+            }
+
+            const exportData = {
+                exportTime: new Date().toISOString(),
+                totalEntries: this.logs.length,
+                logs: this.logs.map(log => ({
+                    timestamp: log.timestamp.toISOString(),
+                    type: log.type,
+                    message: log.message,
+                    details: log.details
+                }))
+            };
+
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+                type: 'application/json'
+            });
+
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `UAV_Dashboard_Activity_Log_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            this.addActivity('system', 'Activity log exported successfully');
+        }
+
+        saveToStorage() {
+            try {
+                const logsToSave = this.logs.slice(0, 50).map(log => ({
+                    ...log,
+                    timestamp: log.timestamp.toISOString()
+                }));
+                localStorage.setItem('uav_dashboard_logs', JSON.stringify(logsToSave));
+            } catch (e) {
+                console.warn('Could not save logs to storage:', e);
+            }
+        }
+
+        loadStoredLogs() {
+            try {
+                const stored = localStorage.getItem('uav_dashboard_logs');
+                if (stored) {
+                    const parsedLogs = JSON.parse(stored);
+                    this.logs = parsedLogs.map(log => ({
+                        ...log,
+                        timestamp: new Date(log.timestamp)
+                    }));
+
+                    // Clear container first
+                    this.logContainer.innerHTML = '';
+                    
+                    // Render stored logs (newest first)
+                    this.logs.forEach(log => this.renderLogEntry(log));
+                }
+            } catch (e) {
+                console.warn('Could not load stored logs:', e);
+            }
+        }
+
+        // Log specific dashboard activities
+        logTelemetryUpdate(data) {
+            this.addActivity('telemetry', `Telemetry data updated`, data);
+        }
+
+        logConnectionEvent(status, message) {
+            const type = status === 'connected' ? 'success' : 'warning';
+            this.addActivity('connection', message);
+        }
+
+        logMapInteraction(action, details) {
+            this.addActivity('map', `Map: ${action}`, details);
+        }
+
+        logChartUpdate(chartName) {
+            this.addActivity('chart', `${chartName} chart updated`);
+        }
+
+        logRelayOperation(operation, success = true) {
+            const type = success ? 'success' : 'error';
+            this.addActivity('relay', `Relay ${operation} ${success ? 'successful' : 'failed'}`);
+        }
+
+        logSystemEvent(message, type = 'system') {
+            this.addActivity(type, message);
+        }
+    }
+
+    // --- Emergency system akan dihandle oleh control-panel.js ---
+
+    
+    // Add emergency progress animation
+    const emergencyStyles = document.createElement('style');
+    emergencyStyles.textContent = `
+        @keyframes emergencyFlash {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        @keyframes emergencyProgress {
+            0% { width: 0%; }
+            100% { width: 100%; }
+        }
+    `;
+    document.head.appendChild(emergencyStyles);
+    
+    // Initialize Systems when DOM is ready
+    document.addEventListener('DOMContentLoaded', () => {
+        console.log('📊 [INIT] DOM Content Loaded - initializing systems...');
+        
+        // Initialize Activity Logger first
+        try {
+            window.activityLogger = new ActivityLogger();
+            console.log('📊 [ACTIVITY] Activity logger system initialized successfully');
+        } catch (error) {
+            console.error('📊 [ACTIVITY] Failed to initialize Activity Logger:', error);
+        }
+        
+        // Control Panel System akan diinisialisasi oleh control-panel.js
+        // Kita hanya perlu memastikan event listener tersedia
+        console.log('🎮 [CONTROL-PANEL] Waiting for Control Panel System initialization...');
+    });
+    
+    // Fallback initialization if DOM is already loaded
+    if (document.readyState === 'loading') {
+        console.log('📊 [INIT] DOM still loading, waiting for DOMContentLoaded...');
+    } else {
+        console.log('📊 [INIT] DOM already loaded, initializing immediately...');
+        
+        // Initialize Activity Logger first
+        try {
+            if (!window.activityLogger) {
+                window.activityLogger = new ActivityLogger();
+                console.log('📊 [ACTIVITY] Activity logger system initialized (fallback)');
+            }
+        } catch (error) {
+            console.error('📊 [ACTIVITY] Failed to initialize Activity Logger (fallback):', error);
+        }
+        
+        // Control Panel System akan diinisialisasi oleh control-panel.js
+        console.log('🎮 [CONTROL-PANEL] Waiting for Control Panel System initialization (fallback)...');
+    }
+    </script>
+</body>
+</html>

@@ -1,0 +1,726 @@
+diff --git a/ESP32_UAV_MASTER.ino b/ESP32_UAV_MASTER_FIXED.ino
+index 1234567..abcdefg 100644
+--- a/ESP32_UAV_MASTER.ino
++++ b/ESP32_UAV_MASTER_FIXED.ino
+@@ -1,5 +1,12 @@
+ /**
+- * ESP32 UAV TELEMETRY SYSTEM - MASTER VERSION (UNIFIED)
++ * ESP32 UAV TELEMETRY SYSTEM - MASTER VERSION (SECURITY & PERFORMANCE FIXED)
++ * 
++ * MAJOR FIXES APPLIED:
++ * - Removed blocking delays from main loop 
++ * - Fixed race conditions and memory leaks
++ * - Enhanced security (credentials management)
++ * - Improved error handling and recovery
++ * - Optimized memory usage and performance
+  */
+ 
+ // LIBRARIES & DEPENDENCIES
+@@ -10,15 +17,20 @@
+ #include <Wire.h>
+ #include <Adafruit_INA219.h>
+ #include <TinyGPS++.h>
++#include <Preferences.h>
++#include <esp_task_wdt.h>
++#include <esp_system.h>
+ 
+-// NETWORK CONFIGURATION - SESUAIKAN DENGAN SETUP ANDA
+-const char* ssid = "Redmi13";                    // WiFi SSID Anda
+-const char* password = "12345678";               // WiFi Password Anda
+-const char* serverHost = "10.86.58.211";        // IP Komputer Dashboard
+-const int serverPort = 3003;                    // Port Server
++// SECURITY & CONFIGURATION
++#define MAX_SSID_LENGTH 32
++#define MAX_PASSWORD_LENGTH 64
++#define MAX_HOST_LENGTH 64
++#define CONFIG_NAMESPACE "uav_config"
++
++// Network configuration now stored securely in EEPROM
++struct NetworkConfig {
++  char ssid[MAX_SSID_LENGTH] = "YOUR_WIFI_SSID";
++  char password[MAX_PASSWORD_LENGTH] = "YOUR_WIFI_PASSWORD";  
++  char serverHost[MAX_HOST_LENGTH] = "192.168.1.100";
++  int serverPort = 3003;
++  bool initialized = false;
++};
++
++NetworkConfig networkConfig;
++Preferences preferences;
+ 
+ // SYSTEM STATE STRUCTURE
+ struct SystemState {
+   // Connection status (volatile for ISR safety)
+-  bool wifiConnected = false;
+-  bool serverConnected = false;
+-  bool webSocketConnected = false;
++  volatile bool wifiConnected = false;
++  volatile bool serverConnected = false;
++  volatile bool webSocketConnected = false;
+   
+   // Hardware status  
+-  bool gpsValid = false;
+-  bool ina219Ready = false;
++  volatile bool gpsValid = false;
++  volatile bool ina219Ready = false;
+   
+   // Timing variables (non-blocking)
+   unsigned long lastTelemetrySent = 0;
+   unsigned long lastConnectionCheck = 0;
+   unsigned long lastServerTest = 0;
+   unsigned long lastStatusPrint = 0;
++  unsigned long lastGPSValid = 0;
+   
+   // Statistics with overflow protection
+-  unsigned long packetNumber = 0;
+-  unsigned long successfulPackets = 0;
+-  unsigned long failedPackets = 0;
+-  int reconnectAttempts = 0;
+-  int httpErrorCount = 0;
++  uint32_t packetNumber = 0;
++  uint32_t successfulPackets = 0;
++  uint32_t failedPackets = 0;
++  uint8_t reconnectAttempts = 0;
++  uint8_t httpErrorCount = 0;
+   
+   // Device state
+-  bool relayState = false;
++  volatile bool relayState = false;
++  
++  // Connection state machine
++  enum ConnectionState {
++    DISCONNECTED,
++    CONNECTING,  
++    CONNECTED,
++    RECONNECTING,
++    FAILED
++  } connectionState = DISCONNECTED;
++  
++  unsigned long stateChangeTime = 0;
+ } systemState;
+ 
+ // TELEMETRY DATA WITH BOUNDS CHECKING
+ struct TelemetryData {
+   // Battery data with range validation
+-  float battery_voltage = 0.0;
+-  float battery_current = 0.0;  
+-  float battery_power = 0.0;
++  float battery_voltage = 0.0f;
++  float battery_current = 0.0f;  
++  float battery_power = 0.0f;
+   
+   // GPS data with coordinate validation
+   double gps_latitude = -5.358400;
+   double gps_longitude = 105.311700;
+-  float altitude = 0.0;
+-  float speed = 0.0;
+-  int satellites = 0;
++  float altitude = 0.0f;
++  float speed = 0.0f;
++  uint8_t satellites = 0;
+   
+   // Environmental data
+-  float temperature = 25.0;
+-  float humidity = 60.0;
++  float temperature = 25.0f;
++  float humidity = 60.0f;
+   
+   // System data
+-  int signal_strength = 0;
+-  unsigned long timestamp = 0;
++  int8_t signal_strength = 0;  // RSSI range -127 to 0
++  uint32_t timestamp = 0;
+   String connection_status = "disconnected";
+   String connection_type = "none";
+-  unsigned long packet_number = 0;
++  uint32_t packet_number = 0;
++  
++  // Data validation flags
++  bool voltage_valid = false;
++  bool gps_coords_valid = false;
+ } telemetryData;
+ 
+ // CONFIGURATION CONSTANTS 
+-const unsigned long TELEMETRY_INTERVAL = 3000;           // Send telemetry every 3 seconds
+-const unsigned long CONNECTION_CHECK_INTERVAL = 15000;   // Check connection every 15 seconds
+-const unsigned long SERVER_TEST_INTERVAL = 30000;       // Test server every 30 seconds
+-const unsigned long STATUS_PRINT_INTERVAL = 60000;      // Print status every minute
+-const unsigned long WIFI_RETRY_INTERVAL = 30000;        // WiFi retry interval
+-const int MAX_RECONNECT_ATTEMPTS = 5;                   // Maximum reconnection attempts
+-const int WEBSOCKET_RECONNECT_INTERVAL = 5000;          // WebSocket reconnect interval
++constexpr unsigned long TELEMETRY_INTERVAL = 3000UL;
++constexpr unsigned long CONNECTION_CHECK_INTERVAL = 15000UL;
++constexpr unsigned long SERVER_TEST_INTERVAL = 30000UL;
++constexpr unsigned long STATUS_PRINT_INTERVAL = 60000UL;
++constexpr unsigned long GPS_TIMEOUT = 30000UL;
++constexpr uint8_t MAX_RECONNECT_ATTEMPTS = 5;
++constexpr unsigned long WEBSOCKET_RECONNECT_INTERVAL = 5000UL;
++
++// Connection timeouts with exponential backoff
++constexpr unsigned long BASE_RETRY_INTERVAL = 5000UL;
++constexpr uint8_t MAX_RETRY_MULTIPLIER = 8;
++
++// JSON Buffer sizes (static allocation)
++constexpr size_t TELEMETRY_JSON_SIZE = 1024;
++constexpr size_t COMMAND_JSON_SIZE = 512;
++constexpr size_t INFO_JSON_SIZE = 512;
+ 
+ // SETUP FUNCTION
+ void setup() {
++  // Initialize watchdog timer (30 seconds)
++  esp_task_wdt_init(30, true);
++  esp_task_wdt_add(NULL);
++  
+   // Initialize serial with timeout
+   Serial.begin(115200);
+-  delay(2000);  // Give time for serial monitor to connect
++  Serial.setTimeout(1000);
++  
++  // Wait for serial with timeout to prevent hanging
++  unsigned long serialTimeout = millis() + 3000;
++  while (!Serial && millis() < serialTimeout) {
++    delay(10);
++  }
+   
+   printStartupBanner();
+   
++  // Load configuration from EEPROM
++  if (!loadConfiguration()) {
++    Serial.println("❌ Failed to load configuration!");
++    Serial.println("💡 Use serial commands to configure WiFi credentials");
++  }
++  
+   // Initialize hardware with error checking
+-  initializePins();
+-  initializeI2C();
+-  initializeGPS();
+-  initializeINA219();
++  if (!initializeHardware()) {
++    Serial.println("❌ Critical hardware initialization failed!");
++    return;
++  }
+   
+   // Initialize network with non-blocking approach
+-  initializeWiFiWithDiagnostics();
++  initializeNetworkAsync();
+   
+   printSystemSummary();
+   Serial.println("✅ ESP32 initialization completed!");
+   
+   // Initial status indication (non-blocking)
+-  blinkLED(3, 300);
++  blinkLEDNonBlocking(3, 300);
++  
++  // Reset watchdog
++  esp_task_wdt_reset();
+ }
+ 
+-// MAIN LOOP
++// MAIN LOOP (FULLY NON-BLOCKING)
+ void loop() {
+   unsigned long currentTime = millis();
+   
++  // Reset watchdog timer
++  esp_task_wdt_reset();
++  
+   // Handle WebSocket events (non-blocking)
+   if (ENABLE_WEBSOCKET) {
+     webSocket.loop();
+   }
+   
+-  // Check connections periodically
+-  if (currentTime - systemState.lastConnectionCheck > CONNECTION_CHECK_INTERVAL) {
+-    checkAllConnections();
+-    systemState.lastConnectionCheck = currentTime;
+-  }
++  // Connection state machine (non-blocking)
++  handleConnectionStateMachine(currentTime);
+   
+-  // Test server connectivity periodically
+-  if (currentTime - systemState.lastServerTest > SERVER_TEST_INTERVAL) {
+-    if (systemState.wifiConnected) {
+-      testServerConnectivity();
+-    }
+-    systemState.lastServerTest = currentTime;
+-  }
++  // Periodic tasks with individual timing
++  handlePeriodicTasks(currentTime);
+   
+-  // Read all sensor data
+-  readAllSensors();
++  // Read sensors (non-blocking)
++  readAllSensorsNonBlocking();
+   
+-  // Send telemetry data
+-  if (currentTime - systemState.lastTelemetrySent > TELEMETRY_INTERVAL) {
+-    sendTelemetryData();
++  // Send telemetry (non-blocking with rate limiting)
++  if (shouldSendTelemetry(currentTime)) {
++    sendTelemetryDataAsync();
+     systemState.lastTelemetrySent = currentTime;
+   }
+   
+-  // Update status LED
+-  updateStatusLED();
+-  
+-  // Print status report periodically
+-  if (DEBUG_MODE && currentTime - systemState.lastStatusPrint > STATUS_PRINT_INTERVAL) {
+-    printDetailedStatusReport();
+-    systemState.lastStatusPrint = currentTime;
+-  }
++  // Update status LED (non-blocking)
++  updateStatusLEDNonBlocking(currentTime);
+   
+   // Process serial commands (non-blocking)
+-  processSerialCommands();
++  processSerialCommandsNonBlocking();
+   
+-  // Prevent watchdog reset
+-  delay(100);
++  // Yield to prevent watchdog reset (much shorter delay)
++  yield();
++  delayMicroseconds(100);  // 0.1ms instead of 100ms
+ }
+ 
++// CONFIGURATION MANAGEMENT
++bool loadConfiguration() {
++  preferences.begin(CONFIG_NAMESPACE, false);
++  
++  bool hasConfig = preferences.getBool("configured", false);
++  if (!hasConfig) {
++    Serial.println("⚠️ No stored configuration found");
++    return false;
++  }
++  
++  // Load with bounds checking
++  size_t ssidLen = preferences.getString("ssid", "").length();
++  size_t passwordLen = preferences.getString("password", "").length();
++  size_t hostLen = preferences.getString("host", "").length();
++  
++  if (ssidLen >= MAX_SSID_LENGTH || passwordLen >= MAX_PASSWORD_LENGTH || 
++      hostLen >= MAX_HOST_LENGTH) {
++    Serial.println("❌ Invalid stored configuration lengths");
++    return false;
++  }
++  
++  preferences.getString("ssid", networkConfig.ssid, MAX_SSID_LENGTH);
++  preferences.getString("password", networkConfig.password, MAX_PASSWORD_LENGTH);
++  preferences.getString("host", networkConfig.serverHost, MAX_HOST_LENGTH);
++  networkConfig.serverPort = preferences.getInt("port", 3003);
++  
++  preferences.end();
++  
++  networkConfig.initialized = true;
++  Serial.println("✅ Configuration loaded successfully");
++  return true;
++}
++
++bool saveConfiguration() {
++  preferences.begin(CONFIG_NAMESPACE, false);
++  
++  bool success = true;
++  success &= preferences.putString("ssid", networkConfig.ssid);
++  success &= preferences.putString("password", networkConfig.password);  
++  success &= preferences.putString("host", networkConfig.serverHost);
++  success &= preferences.putInt("port", networkConfig.serverPort);
++  success &= preferences.putBool("configured", true);
++  
++  preferences.end();
++  
++  if (success) {
++    Serial.println("✅ Configuration saved successfully");
++  } else {
++    Serial.println("❌ Failed to save configuration");
++  }
++  
++  return success;
++}
++
+ // NON-BLOCKING SENSOR READING
+-void readAllSensors() {
++void readAllSensorsNonBlocking() {
+   // Read GPS data (non-blocking)
+-  readGPSData();
++  readGPSDataNonBlocking();
+   
+   // Read battery data with error handling
+-  readINA219Data();
++  readINA219DataSecure();
+   
+-  // Update system data
+-  telemetryData.signal_strength = WiFi.RSSI();
+-  telemetryData.timestamp = millis();
+-  telemetryData.packet_number = systemState.packetNumber;
+-  
+-  // Update connection status
+-  if (systemState.wifiConnected && systemState.serverConnected) {
+-    telemetryData.connection_status = "connected";
+-    telemetryData.connection_type = systemState.communicationMode;
+-  } else if (systemState.wifiConnected) {
+-    telemetryData.connection_status = "wifi_only";
+-    telemetryData.connection_type = "none";
+-  } else {
+-    telemetryData.connection_status = "disconnected";
+-    telemetryData.connection_type = "none";
+-  }
++  // Update system data with bounds checking
++  updateSystemDataSecure();
+ }
+ 
+-void readGPSData() {
+-  while (gpsSerial.available() > 0) {
++void readGPSDataNonBlocking() {
++  // Process available GPS data without blocking
++  int processCount = 0;
++  while (gpsSerial.available() > 0 && processCount < 10) { // Limit processing per loop
+     if (gps.encode(gpsSerial.read())) {
++      bool hasValidData = false;
++      
+       if (gps.location.isValid()) {
+-        telemetryData.gps_latitude = gps.location.lat();
+-        telemetryData.gps_longitude = gps.location.lng();
+-        systemState.gpsValid = true;
++        double lat = gps.location.lat();
++        double lng = gps.location.lng();
++        
++        // Validate GPS coordinates (reasonable Earth bounds)
++        if (lat >= -90.0 && lat <= 90.0 && lng >= -180.0 && lng <= 180.0) {
++          telemetryData.gps_latitude = lat;
++          telemetryData.gps_longitude = lng;
++          telemetryData.gps_coords_valid = true;
++          hasValidData = true;
++        }
+       }
+       
+-      if (gps.altitude.isValid()) {
++      if (gps.altitude.isValid() && gps.altitude.meters() >= -1000.0 && gps.altitude.meters() <= 50000.0) {
+         telemetryData.altitude = gps.altitude.meters();
+       }
+       
+-      if (gps.speed.isValid()) {
++      if (gps.speed.isValid() && gps.speed.kmph() >= 0.0 && gps.speed.kmph() <= 1000.0) {
+         telemetryData.speed = gps.speed.kmph();
+       }
+       
+-      if (gps.satellites.isValid()) {
+-        telemetryData.satellites = gps.satellites.value();
++      if (gps.satellites.isValid() && gps.satellites.value() <= 50) {
++        telemetryData.satellites = min((int)gps.satellites.value(), 255);
++      }
++      
++      if (hasValidData) {
++        systemState.gpsValid = true;
++        systemState.lastGPSValid = millis();
+       }
+     }
++    processCount++;
+   }
+   
+-  // Check GPS validity timeout (no valid data for 30 seconds)
+-  static unsigned long lastValidGPS = 0;
+-  if (systemState.gpsValid) {
+-    lastValidGPS = millis();
+-  } else if (millis() - lastValidGPS > 30000) {
++  // Check GPS validity timeout with proper bounds
++  if (systemState.gpsValid && millis() - systemState.lastGPSValid > GPS_TIMEOUT) {
+     systemState.gpsValid = false;
+   }
+ }
+ 
+-void readINA219Data() {
++void readINA219DataSecure() {
+   if (systemState.ina219Ready) {
+-    // Read INA219 sensor data with error checking
+     float voltage = ina219.getBusVoltage_V();
+     float current = ina219.getCurrent_mA();
+     float power = ina219.getPower_mW();
+     
+-    // Check if readings are valid (not NaN or extreme values)
+-    if (!isnan(voltage) && !isnan(current) && !isnan(power) && 
+-        voltage >= 0 && voltage <= 50 && current >= -5000 && current <= 5000) {
++    // Validate sensor readings with reasonable bounds
++    bool voltageValid = !isnan(voltage) && voltage >= 0.0f && voltage <= 50.0f;
++    bool currentValid = !isnan(current) && current >= -10000.0f && current <= 10000.0f;
++    bool powerValid = !isnan(power) && power >= -500000.0f && power <= 500000.0f;
++    
++    if (voltageValid && currentValid && powerValid) {
+       telemetryData.battery_voltage = voltage;
+       telemetryData.battery_current = current;
+       telemetryData.battery_power = power;
++      telemetryData.voltage_valid = true;
+     } else {
+-      // If sensor reading fails, mark as not ready
++      // Mark sensor as not ready if readings are invalid
+       systemState.ina219Ready = false;
++      telemetryData.voltage_valid = false;
++      
+       if (DEBUG_MODE) {
+-        Serial.println("⚠️ INA219 reading error - invalid data detected");
++        Serial.println("⚠️ INA219 invalid readings detected");
+       }
+     }
+   } else {
+-    // Simulate battery data if sensor not available
+-    telemetryData.battery_voltage = 11.8 + random(-50, 50) / 100.0;
+-    telemetryData.battery_current = 150 + random(-20, 20);
+-    telemetryData.battery_power = telemetryData.battery_voltage * telemetryData.battery_current;
++    // Generate realistic simulated data
++    static float simVoltage = 11.8f;
++    static float simCurrent = 150.0f;
++    
++    // Add small random variation
++    simVoltage += (random(-10, 11) / 1000.0f);
++    simCurrent += (random(-20, 21) / 10.0f);
++    
++    // Keep within reasonable bounds
++    simVoltage = constrain(simVoltage, 10.0f, 13.0f);
++    simCurrent = constrain(simCurrent, 100.0f, 200.0f);
++    
++    telemetryData.battery_voltage = simVoltage;
++    telemetryData.battery_current = simCurrent;
++    telemetryData.battery_power = simVoltage * simCurrent;
++    telemetryData.voltage_valid = false;  // Mark as simulated
+   }
+ }
+ 
+ // TELEMETRY TRANSMISSION (NON-BLOCKING)
+-void sendTelemetryData() {
+-  if (!systemState.wifiConnected) {
+-    return;
+-  }
++bool shouldSendTelemetry(unsigned long currentTime) {
++  return (currentTime - systemState.lastTelemetrySent >= TELEMETRY_INTERVAL) &&
++         systemState.wifiConnected;
++}
++
++void sendTelemetryDataAsync() {
++  // Increment packet number with overflow protection
++  if (systemState.packetNumber == UINT32_MAX) {
++    systemState.packetNumber = 0;
++  } else {
++    systemState.packetNumber++;
++  }
+   
+   // Try WebSocket first if available
+   if (ENABLE_WEBSOCKET && systemState.webSocketConnected) {
+-    sendTelemetryViaWebSocket();
+-  } else {
+-    // Fallback to HTTP
+-    sendTelemetryViaHTTP();
++    sendTelemetryViaWebSocketSecure();
++  } else if (systemState.serverConnected) {
++    sendTelemetryViaHTTPSecure();
++  } else {
++    // No connection available
++    systemState.failedPackets++;
++    if (systemState.failedPackets == UINT32_MAX) systemState.failedPackets = 0;
+   }
+-  
+-  systemState.packetNumber++;
+ }
+ 
+-void sendTelemetryViaWebSocket() {
+-  DynamicJsonDocument doc(1024);
++void sendTelemetryViaWebSocketSecure() {
++  StaticJsonDocument<TELEMETRY_JSON_SIZE> doc;
++  
++  // Build JSON with bounds checking
++  if (!buildTelemetryJSON(doc)) {
++    systemState.failedPackets++;
++    if (systemState.failedPackets == UINT32_MAX) systemState.failedPackets = 0;
++    return;
++  }
++  
++  String jsonString;
++  size_t jsonSize = serializeJson(doc, jsonString);
++  
++  // Check JSON size limits
++  if (jsonSize > TELEMETRY_JSON_SIZE - 100) { // Leave some margin
++    Serial.println("❌ Telemetry JSON too large");
++    systemState.failedPackets++;
++    if (systemState.failedPackets == UINT32_MAX) systemState.failedPackets = 0;
++    return;
++  }
++  
++  bool success = webSocket.sendTXT("telemetryData:" + jsonString);
++  
++  if (success) {
++    systemState.successfulPackets++;
++    if (systemState.successfulPackets == UINT32_MAX) systemState.successfulPackets = 0;
++    
++    if (DEBUG_MODE) {
++      Serial.println("📡 WebSocket telemetry sent #" + String(systemState.packetNumber));
++    }
++  } else {
++    systemState.failedPackets++;
++    if (systemState.failedPackets == UINT32_MAX) systemState.failedPackets = 0;
++    
++    if (DEBUG_MODE) {
++      Serial.println("❌ WebSocket send failed, falling back to HTTP");
++    }
++    
++    // Fallback to HTTP
++    sendTelemetryViaHTTPSecure();
++  }
++}
++
++bool buildTelemetryJSON(JsonDocument& doc) {
++  // Build telemetry JSON with error checking
++  doc.clear();
++  
++  try {
++    doc["battery_voltage"] = round(telemetryData.battery_voltage * 100) / 100.0;
++    doc["battery_current"] = round(telemetryData.battery_current * 100) / 100.0;
++    doc["battery_power"] = round(telemetryData.battery_power * 100) / 100.0;
++    doc["gps_latitude"] = telemetryData.gps_latitude;
++    doc["gps_longitude"] = telemetryData.gps_longitude;
++    doc["altitude"] = telemetryData.altitude;
++    doc["speed"] = telemetryData.speed;
++    doc["satellites"] = telemetryData.satellites;
++    doc["temperature"] = telemetryData.temperature;
++    doc["humidity"] = telemetryData.humidity;
++    doc["signal_strength"] = telemetryData.signal_strength;
++    doc["timestamp"] = telemetryData.timestamp;
++    doc["connection_status"] = telemetryData.connection_status;
++    doc["connection_type"] = telemetryData.connection_type;
++    doc["packet_number"] = telemetryData.packet_number;
++    doc["relay_state"] = systemState.relayState;
++    doc["gps_valid"] = systemState.gpsValid;
++    doc["ina219_ready"] = systemState.ina219Ready;
++    doc["voltage_valid"] = telemetryData.voltage_valid;
++    doc["gps_coords_valid"] = telemetryData.gps_coords_valid;
++    
++    return true;
++  } catch (...) {
++    Serial.println("❌ JSON build error");
++    return false;
++  }
++}
++
++// NON-BLOCKING CONNECTION STATE MACHINE  
++void handleConnectionStateMachine(unsigned long currentTime) {
++  static unsigned long lastStateUpdate = 0;
++  
++  // Rate limit state machine updates
++  if (currentTime - lastStateUpdate < 1000) return;
++  lastStateUpdate = currentTime;
++  
++  switch (systemState.connectionState) {
++    case SystemState::DISCONNECTED:
++      handleDisconnectedState(currentTime);
++      break;
++      
++    case SystemState::CONNECTING:
++      handleConnectingState(currentTime);
++      break;
++      
++    case SystemState::CONNECTED:
++      handleConnectedState(currentTime);
++      break;
++      
++    case SystemState::RECONNECTING:
++      handleReconnectingState(currentTime);
++      break;
++      
++    case SystemState::FAILED:
++      handleFailedState(currentTime);
++      break;
++  }
++}
++
++void handleReconnectingState(unsigned long currentTime) {
++  if (systemState.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
++    // Exponential backoff
++    unsigned long backoffTime = BASE_RETRY_INTERVAL * (1 << min(systemState.reconnectAttempts, (uint8_t)MAX_RETRY_MULTIPLIER));
++    
++    if (currentTime - systemState.stateChangeTime > backoffTime) {
++      WiFi.reconnect();
++      systemState.reconnectAttempts++;
++      systemState.connectionState = SystemState::CONNECTING;
++      systemState.stateChangeTime = currentTime;
++      
++      Serial.println("🔄 Reconnection attempt " + String(systemState.reconnectAttempts) + "/" + String(MAX_RECONNECT_ATTEMPTS));
++    }
++  } else {
++    // Max attempts reached, enter failed state
++    systemState.connectionState = SystemState::FAILED;
++    systemState.stateChangeTime = currentTime;
++    Serial.println("❌ Max reconnection attempts reached");
++  }
++}
++
++// NON-BLOCKING SERIAL COMMAND PROCESSING
++void processSerialCommandsNonBlocking() {
++  static String inputBuffer = "";
++  
++  while (Serial.available() && inputBuffer.length() < 100) { // Prevent buffer overflow
++    char c = Serial.read();
++    
++    if (c == '\n' || c == '\r') {
++      if (inputBuffer.length() > 0) {
++        processCommand(inputBuffer);
++        inputBuffer = "";
++      }
++    } else if (c >= 32 && c <= 126) { // Printable ASCII only
++      inputBuffer += c;
++    }
++  }
++  
++  // Clear buffer if too long (safety)
++  if (inputBuffer.length() >= 100) {
++    inputBuffer = "";
++    Serial.println("❌ Command too long, cleared");
++  }
++}
++
++void processCommand(String command) {
++  command.trim();
++  command.toLowerCase();
++  
++  Serial.println("🎮 Command: " + command);
++  
++  if (command == "status") {
++    printDetailedStatusReportAsync();
++  } else if (command.startsWith("config_wifi ")) {
++    handleWiFiConfigCommand(command);
++  } else if (command.startsWith("config_server ")) {
++    handleServerConfigCommand(command);
++  } else if (command == "save_config") {
++    saveConfiguration();
++  } else if (command == "help") {
++    printSerialCommandsSecure();
++  } else {
++    Serial.println("❓ Unknown command. Type 'help' for commands.");
++  }
++}
++
++void handleWiFiConfigCommand(String command) {
++  // Parse: config_wifi SSID PASSWORD
++  int firstSpace = command.indexOf(' ');
++  int secondSpace = command.indexOf(' ', firstSpace + 1);
++  
++  if (firstSpace == -1 || secondSpace == -1) {
++    Serial.println("❌ Usage: config_wifi <SSID> <PASSWORD>");
++    return;
++  }
++  
++  String newSSID = command.substring(firstSpace + 1, secondSpace);
++  String newPassword = command.substring(secondSpace + 1);
++  
++  // Validate lengths
++  if (newSSID.length() >= MAX_SSID_LENGTH || newPassword.length() >= MAX_PASSWORD_LENGTH) {
++    Serial.println("❌ SSID or password too long");
++    return;
++  }
++  
++  // Validate characters (basic validation)
++  if (newSSID.length() == 0 || newPassword.length() < 8) {
++    Serial.println("❌ Invalid SSID or password (min 8 chars)");
++    return;
++  }
++  
++  newSSID.toCharArray(networkConfig.ssid, MAX_SSID_LENGTH);
++  newPassword.toCharArray(networkConfig.password, MAX_PASSWORD_LENGTH);
++  networkConfig.initialized = true;
++  
++  Serial.println("✅ WiFi config updated (call save_config to persist)");
++}

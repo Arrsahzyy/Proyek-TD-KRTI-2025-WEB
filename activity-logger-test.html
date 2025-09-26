@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Activity Logger Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #1a1a2e;
+            color: white;
+        }
+        
+        /* Activity Log Styling */
+        .activity-log {
+            max-height: 300px;
+            overflow-y: auto;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 8px;
+            border: 1px solid rgba(218, 165, 32, 0.1);
+            margin: 20px 0;
+        }
+
+        .log-entry {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            margin-bottom: 4px;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.03);
+            border-left: 3px solid transparent;
+            transition: all 0.3s ease;
+            font-size: 12px;
+            position: relative;
+        }
+
+        .log-entry:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .log-entry.log-system {
+            border-left-color: #daa520;
+        }
+
+        .log-entry.log-success {
+            border-left-color: #00ff88;
+        }
+
+        .log-entry.log-warning {
+            border-left-color: #ffb347;
+        }
+
+        .log-entry.log-emergency {
+            border-left-color: #ff3838;
+            background: rgba(255, 56, 56, 0.1);
+        }
+
+        .log-entry.log-chart {
+            border-left-color: #ffd700;
+        }
+
+        .log-time {
+            color: #888;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            flex-shrink: 0;
+            min-width: 65px;
+        }
+
+        .log-type-icon {
+            color: #daa520;
+            font-size: 12px;
+            flex-shrink: 0;
+            width: 14px;
+            text-align: center;
+        }
+
+        .log-message {
+            color: white;
+            flex-grow: 1;
+            font-size: 12px;
+            line-height: 1.3;
+        }
+
+        .log-indicator {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #daa520;
+            flex-shrink: 0;
+        }
+        
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #daa520;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background: #b8941f;
+        }
+    </style>
+</head>
+<body>
+    <h1>Activity Logger Test</h1>
+    
+    <div>
+        <button onclick="testSystemLog()">Test System Log</button>
+        <button onclick="testChartLog()">Test Chart Log</button>
+        <button onclick="testEmergencyLog()">Test Emergency Log</button>
+        <button onclick="testSuccessLog()">Test Success Log</button>
+        <button onclick="testWarningLog()">Test Warning Log</button>
+        <button id="clear-log" onclick="clearLogs()">Clear Logs</button>
+    </div>
+    
+    <div id="activity-log" class="activity-log">
+        <!-- Activity entries will be populated dynamically -->
+    </div>
+
+    <script>
+        // Activity Logger System
+        class ActivityLogger {
+            constructor() {
+                console.log('📊 [ACTIVITY] Initializing ActivityLogger...');
+                this.logContainer = document.getElementById('activity-log');
+                this.clearBtn = document.getElementById('clear-log');
+                this.maxEntries = 100;
+                this.logs = [];
+                
+                console.log('📊 [ACTIVITY] Log container found:', !!this.logContainer);
+                console.log('📊 [ACTIVITY] Clear button found:', !!this.clearBtn);
+                
+                this.addActivity('system', 'Activity Logger Test initialized successfully');
+                
+                console.log('📊 [ACTIVITY] ActivityLogger initialization completed');
+            }
+
+            addActivity(type = 'info', message = '', details = null) {
+                console.log('📊 [ACTIVITY] Adding activity:', { type, message, details });
+                
+                const timestamp = new Date();
+                const entry = {
+                    id: Date.now() + Math.random(),
+                    timestamp: timestamp,
+                    type: type,
+                    message: message,
+                    details: details
+                };
+
+                this.logs.unshift(entry);
+
+                // Limit entries
+                if (this.logs.length > this.maxEntries) {
+                    this.logs = this.logs.slice(0, this.maxEntries);
+                }
+
+                this.renderLogEntry(entry);
+                
+                console.log('📊 [ACTIVITY] Activity added successfully. Total entries:', this.logs.length);
+            }
+
+            renderLogEntry(entry) {
+                console.log('📊 [ACTIVITY] Rendering log entry:', entry);
+                
+                if (!this.logContainer) {
+                    console.error('📊 [ACTIVITY] Log container not found!');
+                    return;
+                }
+                
+                const logElement = document.createElement('div');
+                logElement.className = `log-entry log-${entry.type}`;
+                logElement.dataset.id = entry.id;
+
+                const timeStr = entry.timestamp.toLocaleTimeString('id-ID', { 
+                    hour12: false, 
+                    hour: '2-digit', 
+                    minute: '2-digit', 
+                    second: '2-digit' 
+                });
+
+                const icon = this.getTypeIcon(entry.type);
+
+                logElement.innerHTML = `
+                    <span class="log-time">[${timeStr}]</span>
+                    <span class="log-type-icon">${icon}</span>
+                    <span class="log-message">${entry.message}</span>
+                    <div class="log-indicator log-indicator-${entry.type}"></div>
+                `;
+
+                // Always prepend to container (newest first)
+                this.logContainer.insertBefore(logElement, this.logContainer.firstChild);
+                
+                console.log('📊 [ACTIVITY] Log entry rendered successfully');
+            }
+
+            getTypeIcon(type) {
+                const icons = {
+                    'system': '⚙️',
+                    'success': '✅',
+                    'warning': '⚠️',
+                    'error': '❌',
+                    'emergency': '🚨',
+                    'chart': '📊',
+                    'info': 'ℹ️'
+                };
+                return icons[type] || icons['info'];
+            }
+
+            clearLogs() {
+                this.logs = [];
+                this.logContainer.innerHTML = '';
+                this.addActivity('system', 'Activity log cleared');
+            }
+        }
+
+        // Initialize Activity Logger
+        let activityLogger;
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            activityLogger = new ActivityLogger();
+            window.activityLogger = activityLogger;
+        });
+
+        // Test functions
+        function testSystemLog() {
+            activityLogger.addActivity('system', 'System test log entry');
+        }
+
+        function testChartLog() {
+            activityLogger.addActivity('chart', 'Chart paused by user');
+        }
+
+        function testEmergencyLog() {
+            activityLogger.addActivity('emergency', 'Emergency cutoff button activated');
+        }
+
+        function testSuccessLog() {
+            activityLogger.addActivity('success', 'Operation completed successfully');
+        }
+
+        function testWarningLog() {
+            activityLogger.addActivity('warning', 'Warning: Something needs attention');
+        }
+
+        function clearLogs() {
+            activityLogger.clearLogs();
+        }
+    </script>
+</body>
+</html>

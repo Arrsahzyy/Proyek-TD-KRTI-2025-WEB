@@ -1,0 +1,58 @@
+{
+  "name": "uav-dashboard-server",
+  "version": "3.1.0",
+  "description": "Secure UAV Dashboard Server - Fixed Version with Security & Performance Enhancements",
+  "main": "server_fixed.js",
+  "scripts": {
+    "start": "node server_fixed.js",
+    "dev": "nodemon server_fixed.js",
+    "test": "jest --coverage",
+    "test:watch": "jest --watch",
+    "test:security": "npm audit && snyk test",
+    "lint": "eslint *.js --fix",
+    "prestart": "npm run security-check",
+    "security-check": "echo 'Running security checks...' && npm audit --audit-level moderate",
+    "monitor": "pm2 start ecosystem.config.js",
+    "stop": "pm2 stop uav-dashboard"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1",
+    "cors": "^2.8.5",
+    "express-rate-limit": "^7.1.5",
+    "helmet": "^7.1.0",
+    "joi": "^17.11.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3",
+    "socket.io-client": "^4.8.1",
+    "eslint": "^8.56.0",
+    "snyk": "^1.1266.0"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/uav-dashboard"
+  },
+  "keywords": [
+    "uav", 
+    "dashboard", 
+    "telemetry", 
+    "esp32", 
+    "iot", 
+    "websocket", 
+    "real-time",
+    "security-fixed"
+  ],
+  "author": "KRTI Team",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/your-org/uav-dashboard/issues"
+  },
+  "homepage": "https://github.com/your-org/uav-dashboard#readme"
+}
