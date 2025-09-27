@@ -1,0 +1,705 @@
+/* 
+ * SWK PRECISION LAYOUT FIX v2.0
+ * Perbaikan presisi untuk System Status dan Activity Log Cards
+ * Mengatasi masalah layout yang tidak stabil dan terpotong
+ */
+
+/* =============================================================================
+   CRITICAL CSS RESET & PRECISION VARIABLES
+   ============================================================================= */
+:root {
+    /* Precise spacing system */
+    --swk-p-xs: 8px;
+    --swk-p-s: 12px;  
+    --swk-p-m: 16px;
+    --swk-p-l: 20px;
+    --swk-p-xl: 24px;
+    
+    /* Precise icon sizes */
+    --swk-icon-system: 20px;
+    --swk-icon-log: 14px;
+    
+    /* Precise width constraints */
+    --swk-status-min-width: 100px;
+    --swk-time-min-width: 65px;
+    
+    /* Precise heights */
+    --swk-status-height: 56px;
+    --swk-log-height: auto;
+    
+    /* Z-index management */
+    --swk-z-fix: 9999;
+}
+
+/* =============================================================================
+   SYSTEM STATUS CARD - PRECISION OVERRIDES
+   ============================================================================= */
+
+/* Force precise container layout */
+.system-status-card.fixed-card {
+    position: relative !important;
+    z-index: var(--swk-z-fix) !important;
+}
+
+/* Precision status items container - COMPACT VERTICAL SPACING */
+.system-status-card .status-items {
+    padding: var(--swk-p-m) var(--swk-p-m) var(--swk-p-m) var(--swk-p-m) !important; /* Reduced from xl to m */
+    display: flex !important;
+    flex-direction: column !important;
+    gap: var(--swk-p-s) !important; /* Reduced from 18px to 12px for compact spacing */
+    height: 100% !important;
+    overflow-y: auto !important;
+}
+
+/* Precision status item layout - COMPACT HEIGHT */
+.system-status-card .status-item.animated-status {
+    display: grid !important;
+    grid-template-columns: 1fr auto auto !important; /* 3-column structure: left content | value | indicator */
+    grid-template-areas: "left value indicator" !important;
+    align-items: center !important;
+    gap: var(--swk-p-xs) !important; /* Even tighter gap for 3-column layout */
+    padding: var(--swk-p-s) var(--swk-p-m) !important; /* Reduced vertical padding from 16px to 12px */
+    border: 1px solid rgba(230, 199, 14, 0.2) !important;
+    border-radius: 6px !important; /* Slightly smaller radius for compact look */
+    background: rgba(20, 46, 85, 0.3) !important;
+    position: relative !important;
+    transition: all 0.3s ease !important;
+    min-height: 44px !important; /* Reduced from 56px to 44px for compact height */
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+/* Precision status-left container - FLEX LAYOUT */
+.system-status-card .status-left {
+    grid-area: left !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: var(--swk-p-s) !important;
+    flex: 1 !important;
+    min-width: 0 !important;
+    overflow: visible !important;
+}
+
+/* Precision status icon */
+.system-status-card .status-icon {
+    color: var(--accent-gold) !important;
+    width: var(--swk-icon-system) !important;
+    height: var(--swk-icon-system) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 16px !important;
+    flex-shrink: 0 !important;
+    order: 1 !important;
+}
+
+/* Precision status label - COMPACT */
+.system-status-card .status-label {
+    color: var(--text-muted) !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    min-width: 80px !important; /* Reduced min-width for more compact layout */
+    flex-shrink: 0 !important;
+    line-height: 1.2 !important; /* Tighter line height */
+    display: flex !important;
+    align-items: center !important;
+    order: 2 !important;
+    white-space: nowrap !important;
+}
+
+/* CRITICAL FIX: Precision status value - OPTIMIZED FOR SIGNAL VISIBILITY */
+.system-status-card .status-value {
+    grid-area: value !important; /* Updated to match new 3-column grid */
+    color: var(--text-primary) !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    text-align: right !important;
+    min-width: 80px !important; /* Optimized for 3-column layout */
+    max-width: none !important; /* REMOVE max-width constraint */
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    line-height: 1.2 !important; /* Tighter line height for compact layout */
+    word-wrap: normal !important;
+    overflow-wrap: normal !important;
+    flex-shrink: 0 !important;
+    
+    /* CRITICAL: Prevent ANY text truncation */
+    white-space: nowrap !important;
+    overflow: visible !important;
+    text-overflow: none !important;
+    
+    /* Ensure full visibility with better spacing */
+    position: relative !important;
+    z-index: 10 !important;
+}
+
+/* SPECIFIC FIX for Signal and numeric values - ENHANCED VISIBILITY */
+.system-status-card .status-value[id*="signal"],
+.system-status-card .status-value[id*="packets"],
+.system-status-card .status-value[id*="data"],
+.system-status-card .status-value[id*="connection"] {
+    font-family: 'Courier New', monospace !important;
+    min-width: 140px !important; /* Increased to ensure "-60 dBm" + signal bars fit */
+    max-width: none !important;
+    text-overflow: none !important;
+    overflow: visible !important;
+    white-space: nowrap !important;
+    padding-right: 0 !important; /* Remove right padding to maximize space */
+}
+
+/* SPECIAL FIX for Signal value specifically */
+.system-status-card .status-value[id="signal-strength"] {
+    min-width: 90px !important; /* Optimized width for Signal value in 3-column layout */
+    justify-content: flex-end !important;
+    align-items: center !important;
+    display: inline-flex !important; /* Change to inline-flex for better control */
+    font-family: 'Courier New', monospace !important; /* Monospace for better number alignment */
+}
+
+/* CRITICAL FIX: Remove any unwanted pseudo-elements from signal-strength */
+.system-status-card .status-value[id="signal-strength"]::before,
+.system-status-card .status-value[id="signal-strength"]::after {
+    display: none !important;
+    content: none !important;
+}
+
+/* LEGACY: Font Awesome overrides no longer needed after Unicode conversion */
+
+/* Precision packet counter positioning */
+.system-status-card .packet-counter {
+    margin-left: var(--swk-p-s) !important;
+    flex-shrink: 0 !important;
+    order: 3 !important;
+}
+
+/* Precision signal indicator positioning - OPTIMIZED FOR 3-COLUMN GRID */
+.system-status-card .signal-indicator {
+    grid-area: indicator !important; /* Assign to dedicated grid area */
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important; /* Align bars to the right */
+    gap: 2px !important; /* Optimal gap between signal bars */
+    flex-shrink: 0 !important;
+    height: 12px !important; /* Fixed height for consistent alignment */
+    min-width: 20px !important; /* Ensure space for 4 signal bars */
+    padding: 0 !important;
+    margin: 0 !important; /* Remove margin since we have dedicated grid area */
+}
+
+/* CRITICAL FIX: Remove any unwanted pseudo-elements from signal-indicator */
+.system-status-card .signal-indicator::before,
+.system-status-card .signal-indicator::after {
+    display: none !important;
+    content: none !important;
+}
+
+/* Signal bars optimization - ENHANCED VISIBILITY */
+.system-status-card .signal-bar {
+    width: 3px !important;
+    background: rgba(230, 199, 14, 0.3) !important; /* Default inactive state */
+    border-radius: 1px !important;
+    transition: all 0.3s ease !important;
+    flex-shrink: 0 !important;
+}
+
+/* CRITICAL FIX: Ensure signal bars don't inherit any Font Awesome icons */
+.system-status-card .signal-bar::before,
+.system-status-card .signal-bar::after {
+    display: none !important;
+    content: none !important;
+}
+
+/* CLEANED: Font Awesome conflicts resolved with Unicode icon replacement */
+
+/* Signal bar heights for different levels */
+.system-status-card .signal-bar:nth-child(1) { height: 4px !important; }
+.system-status-card .signal-bar:nth-child(2) { height: 6px !important; }
+.system-status-card .signal-bar:nth-child(3) { height: 9px !important; }
+.system-status-card .signal-bar:nth-child(4) { height: 12px !important; }
+
+.system-status-card .signal-bar.active {
+    background: var(--accent-gold) !important;
+}
+
+/* DIRECT TARGET: Fix backwards icon on Signal row specifically */
+.system-status-card .status-item:nth-of-type(5) *::before,
+.system-status-card .status-item:nth-of-type(5) *::after {
+    display: none !important;
+    content: none !important;
+    font-size: 0 !important;
+}
+
+/* SIGNAL ROW OPTIMIZATION: Clean layout after Unicode icon conversion */
+.system-status-card .status-item:nth-of-type(5) {
+    position: relative !important;
+}
+
+/* Force clean text display for Signal value */
+.system-status-card .status-item:nth-of-type(5) #signal-strength {
+    font-family: 'Courier New', monospace !important;
+    background: transparent !important;
+    position: relative !important;
+}
+
+/* Block any dynamic content injection */
+.system-status-card .status-item:nth-of-type(5) #signal-strength:empty::after {
+    content: "--" !important;
+    color: rgba(255, 255, 255, 0.7) !important;
+}
+
+
+
+/* Precision status pulse positioning */
+.system-status-card .status-pulse {
+    margin-left: var(--swk-p-s) !important;
+    flex-shrink: 0 !important;
+}
+
+/* Precision hover states */
+.system-status-card .status-item.animated-status:hover {
+    background: rgba(230, 199, 14, 0.1) !important;
+    border-color: var(--accent-gold) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 12px rgba(230, 199, 14, 0.15) !important;
+}
+
+/* OFFLINE/ONLINE status colors */
+.system-status-card .status-value.offline {
+    color: var(--state-danger) !important;
+}
+
+.system-status-card .status-value.online {
+    color: var(--state-success) !important;
+}
+
+/* =============================================================================
+   ACTIVITY LOG CARD - PRECISION OVERRIDES  
+   ============================================================================= */
+
+/* Precision log card layout */
+.activity-log-card.fixed-card {
+    position: relative !important;
+    z-index: var(--swk-z-fix) !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+/* Precision log header */
+.activity-log-card .card-header {
+    display: grid !important;
+    grid-template-columns: 1fr auto !important;
+    align-items: center !important;
+    padding: var(--swk-p-s) var(--swk-p-s) !important;
+    flex-shrink: 0 !important;
+}
+
+.activity-log-card .card-header h4 {
+    font-size: 16px !important;
+    line-height: 1.3 !important;
+    margin: 0 !important;
+}
+
+/* Precision log controls */
+.activity-log-card .log-controls {
+    display: flex !important;
+    gap: var(--swk-p-s) !important;
+    align-items: center !important;
+}
+
+.activity-log-card .control-btn-small {
+    padding: var(--swk-p-s) !important;
+    border-radius: 10px !important;
+    min-width: 36px !important;
+    min-height: 36px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+/* CRITICAL FIX: Precision activity log container */
+.activity-log-card .activity-log {
+    flex: 1 !important;
+    max-height: 320px !important; /* Desktop max-height */
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding: var(--swk-p-xs) !important; /* Match original */
+    background: rgba(255, 255, 255, 0.02) !important; /* Match original */
+    border-radius: 8px !important;
+    border: 1px solid rgba(230, 199, 14, 0.1) !important; /* Match original gold accent */
+    margin: 0 var(--swk-p-m) var(--swk-p-m) !important; /* Proper spacing from frame */
+    
+    /* Precision scrollbar */
+    scrollbar-width: thin !important;
+    scrollbar-color: rgba(230, 199, 14, 0.3) transparent !important;
+}
+
+.activity-log-card .activity-log::-webkit-scrollbar {
+    width: 6px !important;
+}
+
+.activity-log-card .activity-log::-webkit-scrollbar-track {
+    background: transparent !important;
+    border-radius: 3px !important;
+}
+
+.activity-log-card .activity-log::-webkit-scrollbar-thumb {
+    background: rgba(230, 199, 14, 0.3) !important;
+    border-radius: 3px !important;
+}
+
+.activity-log-card .activity-log::-webkit-scrollbar-thumb:hover {
+    background: rgba(230, 199, 14, 0.5) !important;
+}
+
+/* CRITICAL FIX: Precision log entry layout */
+.activity-log-card .log-entry {
+    display: flex !important; /* Match original flex layout */
+    align-items: center !important;
+    gap: var(--swk-p-xs) !important; /* Match original 8px */
+    padding: 6px 8px !important; /* Match original */
+    margin-bottom: 4px !important; /* Match original */
+    border-radius: 6px !important; /* Match original */
+    background: rgba(255, 255, 255, 0.03) !important; /* Match original */
+    border-left: 3px solid transparent !important; /* Match original */
+    transition: all 0.3s ease !important;
+    font-size: 12px !important; /* Match original */
+    position: relative !important;
+    line-height: 1.3 !important;
+    min-height: auto !important;
+    overflow: visible !important;
+}
+
+/* Precision log time */
+.activity-log-card .log-time {
+    color: var(--text-muted) !important; /* Match original */
+    font-family: 'Courier New', monospace !important;
+    font-size: 11px !important; /* Match original */
+    flex-shrink: 0 !important;
+    min-width: var(--swk-time-min-width) !important; /* Match original 65px */
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+/* Precision log type icon */
+.activity-log-card .log-type-icon {
+    color: var(--accent-gold) !important; /* Match original */
+    font-size: 12px !important; /* Match original */
+    flex-shrink: 0 !important;
+    width: var(--swk-icon-log) !important; /* Match original 14px */
+    text-align: center !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+/* Precision log message - NO TRUNCATION ISSUES */
+.activity-log-card .log-message {
+    font-size: 12px !important; /* Match original */
+    line-height: 1.3 !important;
+    min-width: 0 !important;
+    flex: 1 !important;
+    
+    /* Allow proper text flow */
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+/* Precision log entry hover */
+.activity-log-card .log-entry:hover {
+    background: rgba(255, 255, 255, 0.08) !important; /* Match original */
+    transform: translateY(-1px) !important;
+}
+
+/* Preserve original log entry type colors */
+.activity-log-card .log-entry.log-system {
+    border-left-color: var(--accent-gold) !important;
+}
+
+.activity-log-card .log-entry.log-success {
+    border-left-color: #00ff88 !important;
+}
+
+.activity-log-card .log-entry.log-warning {
+    border-left-color: #ffb347 !important;
+}
+
+.activity-log-card .log-entry.log-error {
+    border-left-color: #ff4757 !important;
+}
+
+.activity-log-card .log-entry.log-emergency {
+    border-left-color: #ff3838 !important;
+    background: rgba(255, 56, 56, 0.1) !important;
+}
+
+.activity-log-card .log-entry.log-relay {
+    border-left-color: #7b68ee !important;
+}
+
+.activity-log-card .log-entry.log-telemetry {
+    border-left-color: #40e0d0 !important;
+}
+
+.activity-log-card .log-entry.log-map {
+    border-left-color: #32cd32 !important;
+}
+
+.activity-log-card .log-entry.log-chart {
+    border-left-color: #ffd700 !important;
+}
+
+.activity-log-card .log-entry.log-connection {
+    border-left-color: #87ceeb !important;
+}
+
+.activity-log-card .log-entry.log-info {
+    border-left-color: #87ceeb !important;
+}
+
+/* Precision log indicator */
+.activity-log-card .log-indicator {
+    position: absolute !important;
+    right: 8px !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    width: 8px !important;
+    height: 8px !important;
+    border-radius: 50% !important;
+    flex-shrink: 0 !important;
+}
+
+/* =============================================================================
+   RESPONSIVE PRECISION FIXES
+   ============================================================================= */
+
+/* Desktop Large (>= 1440px) - MAINTAIN COMPACT DESIGN */
+@media (min-width: 1440px) {
+    .activity-log-card .activity-log {
+        max-height: 380px !important; /* Slightly increased for large screens */
+    }
+    
+    .system-status-card .status-item.animated-status {
+        min-height: 48px !important; /* Keep compact even on large screens */
+        padding: var(--swk-p-s) var(--swk-p-m) !important; /* Maintain compact padding */
+    }
+    
+    .system-status-card .status-value[id="signal-strength"] {
+        min-width: 160px !important; /* Extra space on large screens for signal */
+    }
+}
+
+/* Tablet (768px - 1023px) - OPTIMIZED COMPACT LAYOUT */
+@media (max-width: 1023px) {
+    .system-status-card .status-items {
+        gap: var(--swk-p-xs) !important; /* Even tighter spacing on tablet */
+    }
+    
+    .system-status-card .status-item.animated-status {
+        grid-template-columns: 1fr auto auto !important; /* Maintain 3-column on tablet */
+        grid-template-areas: "left value indicator" !important;
+        gap: 4px !important; /* Tighter gap on tablet */
+        min-height: 40px !important; /* Reduced height for tablet */
+        padding: var(--swk-p-xs) var(--swk-p-s) !important;
+    }
+    
+    .system-status-card .status-value {
+        min-width: 70px !important; /* Reduced for tablet */
+    }
+    
+    .system-status-card .status-value[id="signal-strength"] {
+        min-width: 85px !important; /* Adequate space for signal on tablet */
+    }
+    
+    .system-status-card .signal-indicator {
+        min-width: 18px !important; /* Slightly smaller signal bars area on tablet */
+    }
+    
+    .activity-log-card .activity-log {
+        max-height: 260px !important; /* Slightly increased for better usability */
+    }
+    
+    .activity-log-card .log-time {
+        min-width: 60px !important;
+        font-size: 10px !important;
+    }
+}
+
+/* Mobile (< 768px) - ULTRA COMPACT LAYOUT */ 
+@media (max-width: 767px) {
+    .system-status-card .status-items {
+        padding: var(--swk-p-s) !important; /* Minimal padding on mobile */
+        gap: 6px !important; /* Very tight vertical spacing */
+    }
+    
+    .system-status-card .status-item.animated-status {
+        grid-template-columns: 1fr auto auto !important; /* Maintain 3-column on mobile */
+        grid-template-areas: "left value indicator" !important;
+        gap: 3px !important; /* Minimal gap on mobile */
+        padding: 6px var(--swk-p-s) !important; /* Minimal padding */
+        min-height: 36px !important; /* Compact height for mobile */
+        border-radius: 4px !important; /* Smaller radius */
+    }
+    
+    .system-status-card .status-icon {
+        width: 16px !important;
+        height: 16px !important;
+        font-size: 12px !important;
+    }
+    
+    .system-status-card .status-label {
+        font-size: 11px !important;
+        min-width: 50px !important;
+        line-height: 1.1 !important;
+    }
+    
+    .system-status-card .status-value {
+        font-size: 11px !important;
+        min-width: 60px !important; /* Optimized for mobile 3-column */
+        line-height: 1.1 !important;
+    }
+    
+    .system-status-card .status-value[id="signal-strength"] {
+        min-width: 75px !important; /* Adequate space for signal on mobile */
+    }
+    
+    .system-status-card .signal-indicator {
+        min-width: 15px !important; /* Compact signal bars area on mobile */
+    }
+    
+    .system-status-card .signal-bar {
+        width: 2px !important; /* Thinner signal bars on mobile */
+        gap: 1px !important;
+    }
+    
+    .activity-log-card .activity-log {
+        max-height: 180px !important; /* Compact for mobile */
+        padding: 4px !important;
+    }
+    
+    .activity-log-card .log-entry {
+        padding: 3px 4px !important;
+        gap: 3px !important;
+        margin-bottom: 2px !important; /* Tighter spacing between entries */
+    }
+    
+    .activity-log-card .log-time {
+        min-width: 45px !important;
+        font-size: 8px !important;
+    }
+    
+    .activity-log-card .log-type-icon {
+        width: 10px !important;
+        font-size: 9px !important;
+    }
+    
+    .activity-log-card .log-message {
+        font-size: 10px !important;
+    }
+}
+
+/* =============================================================================
+   ACCESSIBILITY & PERFORMANCE
+   ============================================================================= */
+
+/* Focus states */
+.system-status-card .status-item.animated-status:focus-within,
+.activity-log-card .log-entry:focus-within,
+.activity-log-card .control-btn-small:focus {
+    outline: 2px solid rgba(14, 165, 233, 0.8) !important;
+    outline-offset: 2px !important;
+    border-radius: 8px !important;
+}
+
+/* High contrast support */
+@media (prefers-contrast: high) {
+    .system-status-card .status-value,
+    .activity-log-card .log-time {
+        font-weight: 700 !important;
+    }
+    
+    .system-status-card .status-item.animated-status,
+    .activity-log-card .log-entry {
+        border: 1px solid rgba(230, 199, 14, 0.5) !important;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .system-status-card .status-item.animated-status,
+    .activity-log-card .log-entry,
+    .activity-log-card .control-btn-small {
+        transition: none !important;
+    }
+    
+    .system-status-card .status-item.animated-status:hover,
+    .activity-log-card .log-entry:hover {
+        transform: none !important;
+    }
+}
+
+/* =============================================================================
+   CRITICAL OVERRIDES - ENSURE NO CONFLICTS & OPTIMAL DISPLAY
+   ============================================================================= */
+
+/* Force precedence over existing styles */
+.system-status-card .status-value {
+    max-width: unset !important;
+    width: auto !important;
+    flex-basis: auto !important;
+}
+
+/* Force activity log spacing */
+.activity-log-card {
+    container-type: inline-size !important;
+}
+
+/* Prevent layout shifts */
+.system-status-card .status-item.animated-status,
+.activity-log-card .log-entry {
+    contain: layout style !important;
+}
+
+/* ENHANCED: Ensure Signal indicator never overlaps or gets cut off */
+.system-status-card .status-item:has(#signal-strength) {
+    overflow: visible !important;
+}
+
+.system-status-card .status-item:has(#signal-strength) .status-value {
+    position: relative !important;
+    z-index: 100 !important;
+}
+
+/* ENHANCED: Optimize grid columns to prevent content overlap */
+.system-status-card .status-item.animated-status {
+    grid-template-columns: minmax(0, 1fr) minmax(140px, auto) !important; /* Ensure right column has enough space */
+}
+
+/* ENHANCED: Compact card header */
+.system-status-card .card-header {
+    padding: var(--swk-p-s) var(--swk-p-m) var(--swk-p-xs) !important; /* Reduced bottom padding */
+}
+
+.activity-log-card .card-header {
+    padding: var(--swk-p-s) var(--swk-p-s) var(--swk-p-xs) !important; /* Reduced bottom padding */
+}
+
+/* ENHANCED: Ensure all status values are properly aligned */
+.system-status-card .status-value {
+    vertical-align: middle !important;
+    align-self: center !important;
+}
+
+/* Debug helpers - remove in production */
+/*
+.system-status-card .status-value {
+    background: rgba(255, 0, 0, 0.1) !important;
+    border: 1px dashed red !important;
+}
+
+.activity-log-card .activity-log {
+    border: 2px dashed blue !important;
+}
+*/

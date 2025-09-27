@@ -24,6 +24,7 @@ const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const Joi = require('joi');
 const EventEmitter = require('events');
+const MQTTBridge = require('./mqtt-client');
 
 // =============================================================================
 // ENVIRONMENT CONFIGURATION
@@ -53,9 +54,9 @@ const CONFIG = {
         DEDUP_WINDOW_MS: parseInt(process.env.DEDUP_WINDOW_MS) || 5000
     },
     
-    // Dummy data settings
+    // Dummy data settings - DISABLED
     DUMMY_DATA: {
-        ENABLED: process.env.DUMMY_DATA_ENABLED !== 'false',
+        ENABLED: false, // Matikan dummy data
         INTERVAL: parseInt(process.env.DUMMY_DATA_INTERVAL) || 2000,
         GPS_BASE: {
             latitude: parseFloat(process.env.GPS_BASE_LAT) || -5.358400,
@@ -69,6 +70,16 @@ const CONFIG = {
         MAX_CONCURRENT_REQUESTS: parseInt(process.env.MAX_CONCURRENT_REQUESTS) || 100,
         MEMORY_LIMIT_MB: parseInt(process.env.MEMORY_LIMIT_MB) || 512,
         CPU_LIMIT_PERCENT: parseInt(process.env.CPU_LIMIT_PERCENT) || 80
+    },
+    
+    // MQTT settings for ESP32 integration - Sesuai source code  
+    MQTT: {
+        BROKER: process.env.MQTT_BROKER || 'wss://broker.hivemq.com:8884/mqtt',
+        CLIENT_ID: process.env.MQTT_CLIENT_ID || 'WEBSITETD-server',
+        KEEPALIVE: parseInt(process.env.MQTT_KEEPALIVE) || 60,
+        CONNECT_TIMEOUT: parseInt(process.env.MQTT_CONNECT_TIMEOUT) || 30000,
+        RECONNECT_PERIOD: parseInt(process.env.MQTT_RECONNECT_PERIOD) || 5000,
+        ENABLED: process.env.MQTT_ENABLED !== 'false'
     }
 };
 
@@ -77,9 +88,9 @@ const CONFIG = {
 // =============================================================================
 const schemas = {
     telemetry: Joi.object({
-        battery_voltage: Joi.number().min(0).max(50).required(),
-        battery_current: Joi.number().min(-10000).max(10000).required(),
-        battery_power: Joi.number().min(-500000).max(500000).required(),
+        battery_voltage: Joi.number().min(0).max(50).optional(),
+        battery_current: Joi.number().min(-10000).max(10000).optional(),
+        battery_power: Joi.number().min(-500000).max(500000).optional(),
         temperature: Joi.number().min(-50).max(100).optional(),
         humidity: Joi.number().min(0).max(100).optional(),
         gps_latitude: Joi.number().min(-90).max(90).optional(),
@@ -89,11 +100,39 @@ const schemas = {
         signal_strength: Joi.number().min(-127).max(0).optional(),
         satellites: Joi.number().integer().min(0).max(50).optional(),
         connection_status: Joi.string().valid('connected', 'disconnected', 'timeout').optional(),
-        connection_type: Joi.string().valid('HTTP', 'WebSocket', 'none').optional(),
+        connection_type: Joi.string().valid('HTTP', 'WebSocket', 'MQTT', 'none').optional(),
         packet_number: Joi.number().integer().min(0).optional(),
         timestamp: Joi.number().integer().optional(),
-        device_id: Joi.string().max(64).optional()
+        device_id: Joi.string().max(64).optional(),
+        relay_status: Joi.boolean().optional(),
+        emergency_status: Joi.string().optional(),
+        type: Joi.string().optional(),
+        data_age: Joi.number().optional()
     }).options({ stripUnknown: true }),
+    
+    // Relaxed schema for MQTT partial data
+    mqttTelemetry: Joi.object({
+        battery_voltage: Joi.number().min(0).max(50).optional(),
+        battery_current: Joi.number().min(-10000).max(10000).optional(), 
+        battery_power: Joi.number().min(-500000).max(500000).optional(),
+        temperature: Joi.number().min(-50).max(100).optional(),
+        humidity: Joi.number().min(0).max(100).optional(),
+        gps_latitude: Joi.number().min(-90).max(90).optional(),
+        gps_longitude: Joi.number().min(-180).max(180).optional(),
+        altitude: Joi.number().min(-1000).max(50000).optional(),
+        speed: Joi.number().min(0).max(1000).optional(),
+        signal_strength: Joi.number().min(-127).max(0).optional(),
+        satellites: Joi.number().integer().min(0).max(50).optional(),
+        connection_status: Joi.string().valid('connected', 'disconnected', 'timeout').optional(),
+        connection_type: Joi.string().valid('HTTP', 'WebSocket', 'MQTT', 'none').optional(),
+        packet_number: Joi.number().integer().min(0).optional(),
+        timestamp: Joi.number().integer().optional(),
+        device_id: Joi.string().max(64).optional(),
+        relay_status: Joi.boolean().optional(),
+        emergency_status: Joi.string().optional(),
+        type: Joi.string().optional(),
+        data_age: Joi.number().optional()
+    }).options({ stripUnknown: true, allowUnknown: true }),
     
     command: Joi.object({
         command: Joi.string().valid('relay', 'emergency', 'reboot', 'status').required(),
@@ -582,6 +621,19 @@ const deduplicationManager = new DeduplicationManager(CONFIG.TELEMETRY.DEDUP_WIN
 const dummyDataGenerator = new DummyDataGenerator(serverState, logger);
 const telemetryCircuitBreaker = new CircuitBreaker({ failureThreshold: 5 });
 
+// Initialize MQTT Bridge for ESP32 integration
+let mqttBridge = null;
+if (CONFIG.MQTT.ENABLED) {
+    mqttBridge = new MQTTBridge({
+        broker: CONFIG.MQTT.BROKER,
+        clientId: CONFIG.MQTT.CLIENT_ID + '-' + Math.random().toString(16).substr(2, 8),
+        keepalive: CONFIG.MQTT.KEEPALIVE,
+        connectTimeout: CONFIG.MQTT.CONNECT_TIMEOUT,
+        reconnectPeriod: CONFIG.MQTT.RECONNECT_PERIOD,
+        logger: logger
+    });
+}
+
 // =============================================================================
 // MIDDLEWARE SETUP
 // =============================================================================
@@ -719,6 +771,135 @@ io.use((socket, next) => {
 
 // Make io globally available for broadcasting
 global.io = io;
+
+// =============================================================================
+// MQTT INTEGRATION SETUP
+// =============================================================================
+if (mqttBridge) {
+    // Setup MQTT event handlers
+    mqttBridge.on('connected', () => {
+        logger.success('MQTT', 'ESP32 MQTT Bridge connected successfully');
+        // Notify all WebSocket clients about MQTT connection
+        io.emit('mqtt_status', { 
+            status: 'connected', 
+            message: 'ESP32 MQTT connection established',
+            timestamp: Date.now()
+        });
+    });
+    
+    mqttBridge.on('disconnected', () => {
+        logger.warn('MQTT', 'ESP32 MQTT Bridge disconnected');
+        io.emit('mqtt_status', { 
+            status: 'disconnected', 
+            message: 'ESP32 MQTT connection lost',
+            timestamp: Date.now()
+        });
+    });
+    
+    mqttBridge.on('error', (error) => {
+        logger.error('MQTT', 'ESP32 MQTT Bridge error', { error: error.message });
+        io.emit('mqtt_status', { 
+            status: 'error', 
+            message: `MQTT Error: ${error.message}`,
+            timestamp: Date.now()
+        });
+    });
+    
+    // Handle telemetry data from ESP32
+    mqttBridge.on('telemetryData', async (mqttData) => {
+        try {
+            logger.debug('MQTT', 'Received telemetry from ESP32', mqttData);
+            
+            // Convert MQTT data to dashboard telemetry format
+            const telemetryData = await convertMQTToTelemetry(mqttData);
+            
+            if (telemetryData) {
+                // Update server state with ESP32 data
+                await serverState.updateTelemetry(telemetryData, 'ESP32_MQTT');
+                
+                // Broadcast to all connected dashboard clients
+                io.emit('telemetryUpdate', {
+                    ...telemetryData,
+                    source: 'ESP32_MQTT',
+                    mqtt_topic: mqttData.topic,
+                    timestamp: mqttData.timestamp
+                });
+                
+                logger.debug('MQTT', 'Telemetry data broadcasted to dashboard clients');
+            }
+            
+        } catch (error) {
+            logger.error('MQTT', 'Error processing ESP32 telemetry', { 
+                error: error.message,
+                mqttData 
+            });
+        }
+    });
+}
+
+/**
+ * Convert MQTT data format to dashboard telemetry format
+ */
+async function convertMQTToTelemetry(mqttData) {
+    try {
+        const { topic, data, timestamp } = mqttData;
+        
+        // Get current telemetry state to merge with new data
+        const currentTelemetry = mqttBridge ? mqttBridge.getCurrentTelemetry() : {};
+        
+        // Create base telemetry object
+        let telemetryData = {
+            timestamp: timestamp || Date.now(),
+            connection_status: 'connected',
+            connection_type: 'MQTT',
+            device_id: 'ESP32_UAV',
+            ...currentTelemetry
+        };
+        
+        // Add the new data based on type
+        switch (data.type) {
+            case 'voltage':
+                telemetryData.battery_voltage = data.battery_voltage;
+                break;
+            case 'current':
+                telemetryData.battery_current = data.battery_current;
+                break;
+            case 'power':
+                telemetryData.battery_power = data.battery_power;
+                break;
+            case 'gps':
+                telemetryData.gps_latitude = data.gps_latitude;
+                telemetryData.gps_longitude = data.gps_longitude;
+                break;
+            case 'relay':
+                telemetryData.relay_status = data.relay_status;
+                break;
+            case 'emergency':
+                telemetryData.emergency_status = data.emergency_status;
+                break;
+        }
+        
+        // Validate using relaxed MQTT schema
+        const { error, value } = schemas.mqttTelemetry.validate(telemetryData);
+        if (error) {
+            logger.warn('MQTT', 'MQTT telemetry validation warning', { 
+                error: error.message,
+                data: telemetryData 
+            });
+            // Still return the data for processing, just log the warning
+            return telemetryData;
+        }
+        
+        return telemetryData;
+        
+    } catch (error) {
+        logger.error('MQTT', 'Error converting MQTT to telemetry', { 
+            error: error.message,
+            mqttData 
+        });
+        return null;
+    }
+}
 
 // Static file serving
 app.use(express.static(__dirname, {
@@ -903,7 +1084,23 @@ app.post('/api/command', async (req, res) => {
             id: `cmd_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
         };
         
-        // Broadcast command to ESP32 via Socket.IO
+        // Send command via MQTT if available and it's emergency command
+        if (mqttBridge && mqttBridge.isConnected && command === 'emergency') {
+            try {
+                // Send emergency command to ESP32 via MQTT
+                mqttBridge.sendEmergencyCommand(action === 'emergency_on' ? 'on' : 'off');
+                commandData.mqtt_sent = true;
+                logger.success('MQTT', 'Emergency command sent via MQTT', { action });
+            } catch (mqttError) {
+                logger.error('MQTT', 'Failed to send emergency command via MQTT', { 
+                    error: mqttError.message 
+                });
+                commandData.mqtt_sent = false;
+                commandData.mqtt_error = mqttError.message;
+            }
+        }
+        
+        // Broadcast command to ESP32 via Socket.IO (backup method)
         io.emit('esp32Command', commandData);
         
         // Also send as relayCommand for backward compatibility
@@ -962,6 +1159,19 @@ app.get('/api/stats', async (req, res) => {
             }
         };
         
+        // Add MQTT statistics if available
+        if (mqttBridge) {
+            response.mqtt = {
+                isConnected: mqttBridge.isConnected,
+                statistics: mqttBridge.getStatistics(),
+                configuration: {
+                    broker: CONFIG.MQTT.BROKER,
+                    clientId: CONFIG.MQTT.CLIENT_ID,
+                    enabled: CONFIG.MQTT.ENABLED
+                }
+            };
+        }
+        
         res.json(response);
         logger.debug('API', 'System stats requested');
         
@@ -970,6 +1180,85 @@ app.get('/api/stats', async (req, res) => {
         res.status(500).json({ 
             success: false, 
             error: 'Failed to retrieve system statistics' 
+        });
+    }
+});
+
+// Get MQTT status and telemetry data
+app.get('/api/mqtt/status', async (req, res) => {
+    try {
+        if (!mqttBridge) {
+            return res.json({
+                success: true,
+                mqtt: {
+                    enabled: false,
+                    message: 'MQTT integration disabled'
+                }
+            });
+        }
+        
+        const telemetryData = mqttBridge.getCurrentTelemetry();
+        const statistics = mqttBridge.getStatistics();
+        
+        res.json({
+            success: true,
+            mqtt: {
+                enabled: true,
+                connected: mqttBridge.isConnected,
+                statistics: statistics,
+                telemetry: telemetryData,
+                dataAge: mqttBridge.getDataAge(),
+                isDataFresh: mqttBridge.isDataFresh(30) // 30 seconds threshold
+            }
+        });
+        
+        logger.debug('API', 'MQTT status requested');
+        
+    } catch (error) {
+        logger.error('API', 'Error getting MQTT status', { error: error.message });
+        res.status(500).json({
+            success: false,
+            error: 'Failed to retrieve MQTT status'
+        });
+    }
+});
+
+// Send emergency command via MQTT  
+app.post('/api/mqtt/emergency', async (req, res) => {
+    try {
+        const { action } = req.body;
+        
+        if (!mqttBridge || !mqttBridge.isConnected) {
+            return res.status(503).json({
+                success: false,
+                error: 'MQTT not connected'
+            });
+        }
+        
+        if (!['on', 'off'].includes(action)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid action. Must be "on" or "off"'
+            });
+        }
+        
+        mqttBridge.sendEmergencyCommand(action);
+        
+        logger.success('MQTT', 'Emergency command sent via API', { action });
+        
+        res.json({
+            success: true,
+            message: `Emergency ${action} command sent via MQTT`,
+            timestamp: Date.now()
+        });
+        
+    } catch (error) {
+        logger.error('API', 'Error sending MQTT emergency command', { 
+            error: error.message 
+        });
+        res.status(500).json({
+            success: false,
+            error: error.message
         });
     }
 });
@@ -1301,6 +1590,13 @@ async function gracefulShutdown(signal) {
         dummyDataGenerator.stop();
         deduplicationManager.destroy();
         
+        // Disconnect MQTT if connected
+        if (mqttBridge) {
+            logger.info('MQTT', 'Disconnecting from MQTT broker...');
+            mqttBridge.disconnect();
+            logger.success('MQTT', 'MQTT connection closed');
+        }
+        
         // Notify all connected clients
         io.emit('serverShutdown', {
             message: 'Server is shutting down',
@@ -1365,13 +1661,73 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // =============================================================================
+// PORT AVAILABILITY CHECK
+// =============================================================================
+const net = require('net');
+
+/**
+ * Check if a port is available for use
+ */
+function checkPortAvailable(port) {
+    return new Promise((resolve, reject) => {
+        const tester = net.createServer()
+            .once('error', err => {
+                if (err.code === 'EADDRINUSE') {
+                    reject(new Error(`Port ${port} is already in use. Please stop the existing server or use a different port.`));
+                } else {
+                    reject(err);
+                }
+            })
+            .once('listening', () => {
+                tester.once('close', () => resolve(port)).close();
+            })
+            .listen(port);
+    });
+}
+
+/**
+ * Find next available port starting from the given port
+ */
+async function findAvailablePort(startPort, maxAttempts = 10) {
+    for (let i = 0; i < maxAttempts; i++) {
+        const port = startPort + i;
+        try {
+            await checkPortAvailable(port);
+            return port;
+        } catch (error) {
+            if (i === maxAttempts - 1) {
+                throw new Error(`Could not find available port after checking ${maxAttempts} ports starting from ${startPort}`);
+            }
+            continue;
+        }
+    }
+}
+
+// =============================================================================
 // SERVER STARTUP
 // =============================================================================
 async function startServer() {
     try {
-        // Start server
+        // Check if the configured port is available
+        let actualPort = CONFIG.PORT;
+        
+        try {
+            await checkPortAvailable(CONFIG.PORT);
+            logger.info('System', `Port ${CONFIG.PORT} is available`);
+        } catch (error) {
+            logger.warn('System', `Port ${CONFIG.PORT} is in use, finding alternative...`);
+            
+            // Find next available port
+            actualPort = await findAvailablePort(CONFIG.PORT);
+            logger.info('System', `Using alternative port ${actualPort}`);
+            
+            // Update config for this session
+            CONFIG.PORT = actualPort;
+        }
+        
+        // Start server on available port
         await new Promise((resolve, reject) => {
-            server.listen(CONFIG.PORT, (err) => {
+            server.listen(actualPort, (err) => {
                 if (err) reject(err);
                 else resolve();
             });
@@ -1380,11 +1736,29 @@ async function startServer() {
         // Start monitoring
         await startConnectionMonitor();
         
-        // Start dummy data if enabled
-        if (CONFIG.DUMMY_DATA.ENABLED) {
+        // Start MQTT connection if enabled
+        if (mqttBridge) {
+            try {
+                logger.info('MQTT', 'Connecting to ESP32 via MQTT...');
+                await mqttBridge.connect();
+                logger.success('MQTT', 'ESP32 MQTT connection established');
+            } catch (mqttError) {
+                logger.error('MQTT', 'Failed to connect to MQTT broker', { 
+                    error: mqttError.message,
+                    broker: CONFIG.MQTT.BROKER 
+                });
+                // Continue without MQTT - server can still work with HTTP/WebSocket
+            }
+        }
+        
+        // Start dummy data if enabled (only if MQTT is not connected)
+        if (CONFIG.DUMMY_DATA.ENABLED && (!mqttBridge || !mqttBridge.isConnected)) {
             setTimeout(() => {
                 dummyDataGenerator.start();
+                logger.info('DummyData', 'Started dummy data generator (MQTT not available)');
             }, 2000);
+        } else if (mqttBridge && mqttBridge.isConnected) {
+            logger.info('MQTT', 'Using real ESP32 data via MQTT - dummy data disabled');
         }
         
         // Success messages
@@ -1395,11 +1769,18 @@ async function startServer() {
         console.log(`   🔒 Security: CORS whitelist, rate limiting, input validation`);
         console.log(`   🛡️ Monitoring: Circuit breakers, health checks, deduplication`);
         console.log(`   📡 WebSocket: Ready with authentication and rate limiting`);
+        console.log(`   🚁 MQTT ESP32: ${mqttBridge && mqttBridge.isConnected ? '✅ Connected' : '❌ Disconnected'}`);
         console.log(`   🎯 Environment: ${CONFIG.ENVIRONMENT}`);
         console.log(`   📈 Version: 3.1.0 (Security & Performance Fixed)`);
         console.log('');
         
-        logger.info('System', '✅ Ready to receive ESP32 telemetry data');
+        if (mqttBridge && mqttBridge.isConnected) {
+            logger.success('System', '🚁 ESP32 connected via MQTT - Real telemetry data active');
+        } else {
+            logger.info('System', '⚠️ ESP32 not connected - Using demo data mode');
+        }
+        
+        logger.info('System', '✅ Ready to receive telemetry data');
         
     } catch (error) {
         logger.error('System', 'Failed to start server', { error: error.message });

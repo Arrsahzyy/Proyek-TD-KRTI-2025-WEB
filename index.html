@@ -8,6 +8,7 @@
     <link rel="shortcut icon" type="image/png" href="assets/logo swarnakasa.png">
     <link rel="apple-touch-icon" href="assets/logo swarnakasa.png">
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="swk-precision-fix.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -15,6 +16,12 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="/socket.io/socket.io.js"></script>
+    <!-- MQTT.js for WebSocket connection -->
+    <script src="https://unpkg.com/mqtt@5.14.1/dist/mqtt.min.js"></script>
+    <!-- Frontend MQTT Client -->
+    <script src="frontend-mqtt-client.js"></script>
+    <!-- Tracking MQTT Integration -->
+    <script src="tracking-mqtt.js"></script>
 </head>
 <body>
     <!-- Loading Screen -->
@@ -364,6 +371,21 @@
                     </div>
                     <div class="status-item animated-status">
                         <div class="status-left">
+                            <i class="fas fa-wifi status-icon"></i>
+                            <span class="status-label">MQTT:</span>
+                        </div>
+                        <span id="mqtt-connection-status" class="status-value offline">Disconnected</span>
+                        <div class="status-pulse" id="mqtt-pulse"></div>
+                    </div>
+                    <div class="status-item animated-status">
+                        <div class="status-left">
+                            <i class="fas fa-clock status-icon"></i>
+                            <span class="status-label">Last Update:</span>
+                        </div>
+                        <span id="mqtt-last-update" class="status-value">--</span>
+                    </div>
+                    <div class="status-item animated-status">
+                        <div class="status-left">
                             <i class="fas fa-exchange-alt status-icon"></i>
                             <span class="status-label">Packets:</span>
                             <div class="packet-counter" id="packet-animation"></div>
@@ -391,10 +413,10 @@
                 <div class="card-header">
                     <h4><i class="fas fa-list-ul"></i> Activity Log</h4>
                     <div class="log-controls">
-                        <button class="control-btn-small" id="clear-log" title="Clear Log">
+                        <button class="control-btn-small" id="clear-log" title="Clear Log" aria-label="Hapus semua log aktivitas">
                             <i class="fas fa-trash"></i>
                         </button>
-                        <button class="control-btn-small" id="export-log" title="Export Log">
+                        <button class="control-btn-small" id="export-log" title="Export Log" aria-label="Ekspor log aktivitas">
                             <i class="fas fa-file-export"></i>
                         </button>
                     </div>
@@ -551,14 +573,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <!-- Control Panel System -->
     <script src="control-panel.js"></script>
-    <!-- Include tests in development -->
-    <script>
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-            const script = document.createElement('script');
-            script.src = 'control-panel-tests.js';
-            document.head.appendChild(script);
-        }
-    </script>
     <script src="script.js"></script>
     <script>
     // --- Electrical Monitoring Chart ---
@@ -1246,6 +1260,25 @@
             console.error('📊 [ACTIVITY] Failed to initialize Activity Logger:', error);
         }
         
+        // Initialize Frontend MQTT Client after Activity Logger
+        try {
+            if (typeof FrontendMQTTClient !== 'undefined') {
+                window.frontendMQTTClient = new FrontendMQTTClient();
+                console.log('📡 [MQTT] Frontend MQTT client initialized successfully');
+                
+                // Update MQTT status on page load
+                const mqttStatusElement = document.getElementById('mqtt-status-text');
+                if (mqttStatusElement) {
+                    mqttStatusElement.textContent = 'Connecting...';
+                    mqttStatusElement.className = 'status-connecting';
+                }
+            } else {
+                console.warn('📡 [MQTT] FrontendMQTTClient class not found, MQTT integration disabled');
+            }
+        } catch (error) {
+            console.error('📡 [MQTT] Failed to initialize Frontend MQTT Client:', error);
+        }
+        
         // Control Panel System akan diinisialisasi oleh control-panel.js
         // Kita hanya perlu memastikan event listener tersedia
         console.log('🎮 [CONTROL-PANEL] Waiting for Control Panel System initialization...');
@@ -1265,6 +1298,23 @@
             }
         } catch (error) {
             console.error('📊 [ACTIVITY] Failed to initialize Activity Logger (fallback):', error);
+        }
+        
+        // Initialize Frontend MQTT Client (fallback)
+        try {
+            if (typeof FrontendMQTTClient !== 'undefined' && !window.frontendMQTTClient) {
+                window.frontendMQTTClient = new FrontendMQTTClient();
+                console.log('📡 [MQTT] Frontend MQTT client initialized (fallback)');
+                
+                // Update MQTT status on page load
+                const mqttStatusElement = document.getElementById('mqtt-status-text');
+                if (mqttStatusElement) {
+                    mqttStatusElement.textContent = 'Connecting...';
+                    mqttStatusElement.className = 'status-connecting';
+                }
+            }
+        } catch (error) {
+            console.error('📡 [MQTT] Failed to initialize Frontend MQTT Client (fallback):', error);
         }
         
         // Control Panel System akan diinisialisasi oleh control-panel.js

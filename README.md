@@ -1,12 +1,45 @@
-# UAV Dashboard KRTI 2025
+# 🚁 ESP32 UAV Dashboard - MQTT Integration
 
 ![UAV Dashboard](https://img.shields.io/badge/UAV-Dashboard-blue?style=for-the-badge)
-![Version](https://img.shields.io/badge/version-2.0.0-green?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-3.1.0-green?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-yellow?style=for-the-badge)
+![MQTT](https://img.shields.io/badge/MQTT-Connected-success?style=for-the-badge)
 
-## 🚁 Overview
+## ✅ STATUS: BERHASIL TERHUBUNG!
 
-Real-time UAV (Unmanned Aerial Vehicle) monitoring dashboard for KRTI (Kontes Robot Terbang Indonesia) competition 2025. This interactive web-based dashboard provides comprehensive telemetry monitoring, flight path visualization, and system control capabilities.
+ESP32 Anda sudah **BERHASIL TERHUBUNG** ke dashboard via MQTT HiveMQ dengan data real-time:
+- **Voltage**: 15.92V, **Current**: 0.20A, **Power**: 3.25W  
+- **GPS**: -5.359, 105.315 (ITERA area)
+- **Relay & Emergency control**: ✅ Working
+
+## 🚀 QUICK START
+
+### 1. ESP32 Setup (SUDAH SELESAI ✅)
+```arduino
+// File: sodiq.ino sudah siap!
+// Ganti WiFi jika perlu:
+const char* ssid = "Galaxy A52s";
+const char* password = "bentargwliatdulu";
+```
+
+### 2. Start Dashboard Server  
+```powershell
+cd "E:\PROJECT\UAV DASHBOARD LAST\DASHBOARD"
+node server_fixed.js
+```
+
+### 3. Buka Dashboard
+- **URL**: http://localhost:3003
+- **Status**: Harus tampil "Connected to ESP32"
+- **Data**: Real-time charts & GPS map
+
+## 📊 FITUR YANG TERSEDIA
+
+- ⚡ **Real-time Telemetry**: Voltage, Current, Power monitoring
+- 🗺️ **GPS Tracking**: Live location & flight path on map  
+- 🚨 **Emergency Control**: Stop relay via dashboard
+- 📈 **Charts**: 50-point rolling history
+- 🔄 **Auto-recovery**: Switches to dummy data if ESP32 disconnects
 
 ## ✨ Features
 

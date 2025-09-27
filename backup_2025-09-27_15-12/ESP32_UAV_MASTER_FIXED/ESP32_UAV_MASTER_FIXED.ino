@@ -58,9 +58,9 @@
 
 // Default fallback values (will be overridden by stored config)
 struct NetworkConfig {
-  char ssid[MAX_SSID_LENGTH] = "YOUR_WIFI_SSID";
-  char password[MAX_PASSWORD_LENGTH] = "YOUR_WIFI_PASSWORD";  
-  char serverHost[MAX_HOST_LENGTH] = "192.168.1.100";
+  char ssid[MAX_SSID_LENGTH] = "Redmi13";
+  char password[MAX_PASSWORD_LENGTH] = "12345678";  
+  char serverHost[MAX_HOST_LENGTH] = "10.42.136.211";
   int serverPort = 3003;
   bool initialized = false;
 };
@@ -188,7 +188,12 @@ constexpr size_t INFO_JSON_SIZE = 512;
 // =============================================================================
 void setup() {
   // Initialize watchdog timer (30 seconds)
-  esp_task_wdt_init(30, true);
+  esp_task_wdt_config_t wdt_config = {
+    .timeout_ms = 30000,  // 30 seconds timeout
+    .idle_core_mask = (1 << portNUM_PROCESSORS) - 1,  // Monitor all cores
+    .trigger_panic = true  // Trigger panic on timeout
+  };
+  esp_task_wdt_init(&wdt_config);
   esp_task_wdt_add(NULL);
   
   // Initialize serial with timeout
